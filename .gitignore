@@ -15,3 +15,8 @@ cachegrind.out*
 .settings
 .idea
 /toolchain
+
+# GNU GLOBAL
+GPATH
+GRTAGS
+GTAGS
