@@ -1,6 +1,6 @@
 # define the cpu used by the MMA-200 board
 export CPU = stm32f2
-export CPU_MODEL = stm32f205re
+export CPU_MODEL = stm32f205re_MMA-200
 
 #define the default port depending on the host OS
 OS := $(shell uname)
