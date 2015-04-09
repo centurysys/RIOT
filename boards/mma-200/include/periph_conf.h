@@ -82,8 +82,8 @@ extern "C" {
 
 /* UART 0 device configuration */
 #define UART_0_DEV          USART1
-#define UART_0_CLKEN()      (RCC->APB1ENR |= RCC_APB1ENR_USART1EN)
-#define UART_0_CLKDIS()     (RCC->APB1ENR &= ~(RCC_APB1ENR_USART1EN))
+#define UART_0_CLKEN()      (RCC->APB2ENR |= RCC_APB2ENR_USART1EN)
+#define UART_0_CLKDIS()     (RCC->APB2ENR &= ~(RCC_APB2ENR_USART1EN))
 #define UART_0_CLK          (30000000)          /* UART clock runs with 30MHz (F_CPU / 4) */
 #define UART_0_IRQ_CHAN     USART1_IRQn
 #define UART_0_ISR          isr_usart1
@@ -202,7 +202,7 @@ extern "C" {
  * @{
  */
 #define SPI_NUMOF           (2U)
-#define SPI_0_EN            0
+#define SPI_0_EN            1
 #define SPI_1_EN            0
 #define SPI_IRQ_PRIO        1
 
@@ -318,7 +318,7 @@ extern "C" {
 #define GPIO_0_PORT         GPIOB                   /* Used for TEST SW0 */
 #define GPIO_0_PIN          8
 #define GPIO_0_CLK          1                       /* 0: PORT A, 1: B ... */
-#define GPIO_0_EXTI_CFG()   (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI8_PB)
+#define GPIO_0_EXTI_CFG()   (SYSCFG->EXTICR[2] |= SYSCFG_EXTICR3_EXTI8_PB)
 #define GPIO_0_IRQ          EXTI9_5_IRQn
 /* GPIO channel 1 config */
 #define GPIO_1_PORT         GPIOA                   /* LED */
