@@ -127,7 +127,7 @@ void isr_systick(void)              __attribute__ ((weak, alias("dummy_handler")
 /* STM32F2 specific interrupt vector */
 void isr_wwdg(void)                 __attribute__ ((weak, alias("dummy_handler")));
 void isr_pvd(void)                  __attribute__ ((weak, alias("dummy_handler")));
-void isr_tamper(void)               __attribute__ ((weak, alias("dummy_handler")));
+void isr_tamp_stamp(void)           __attribute__ ((weak, alias("dummy_handler")));
 void isr_rtc_wkup(void)             __attribute__ ((weak, alias("dummy_handler")));
 void isr_flash(void)                __attribute__ ((weak, alias("dummy_handler")));
 void isr_rcc(void)                  __attribute__ ((weak, alias("dummy_handler")));
@@ -167,7 +167,7 @@ void isr_usart2(void)               __attribute__ ((weak, alias("dummy_handler")
 void isr_usart3(void)               __attribute__ ((weak, alias("dummy_handler")));
 void isr_exti15_10(void)            __attribute__ ((weak, alias("dummy_handler")));
 void isr_rtc_alarm(void)            __attribute__ ((weak, alias("dummy_handler")));
-void isr_otg_fs_wakeup(void)        __attribute__ ((weak, alias("dummy_handler")));
+void isr_otg_fs_wkup(void)          __attribute__ ((weak, alias("dummy_handler")));
 void isr_tim8_brk_tim12(void)       __attribute__ ((weak, alias("dummy_handler")));
 void isr_tim8_up_tim13(void)        __attribute__ ((weak, alias("dummy_handler")));
 void isr_tim8_trg_com_tim14(void)   __attribute__ ((weak, alias("dummy_handler")));
