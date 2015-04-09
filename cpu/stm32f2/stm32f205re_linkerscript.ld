@@ -34,8 +34,7 @@ SEARCH_DIR(.)
 /* Memory Spaces Definitions */
 MEMORY
 {
-    rom1 (rx) : ORIGIN = 0x08000000, LENGTH = 16K
-    rom2 (rx) : ORIGIN = 0x08020000, LENGTH = 384K
+    rom  (rx) : ORIGIN = 0x08000000, LENGTH = 512K
     ram (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 
@@ -48,17 +47,11 @@ STACK_SIZE = DEFINED(STACK_SIZE) ? STACK_SIZE : 0x200; /* 512 byte */
 /* Section Definitions */
 SECTIONS
 {
-    .vector_table :
-    {
-        KEEP(*(.vectors .vectors.*))
-        KEEP(*startup_stm32f2xx.o(.text))
-    } > rom1
-
     .text :
     {
         . = ALIGN(4);
         _sfixed = .;
-/*        KEEP(*(.vectors .vectors.*)) */
+        KEEP(*(.vectors .vectors.*))
         *(.text .text.* .gnu.linkonce.t.*)
         *(.glue_7t) *(.glue_7)
         *(.rodata .rodata* .gnu.linkonce.r.*)
@@ -101,14 +94,14 @@ SECTIONS
 
         . = ALIGN(4);
         _efixed = .;            /* End of text section */
-    } > rom2
+    } > rom
 
     /* .ARM.exidx is sorted, so has to go in its own output section.  */
     PROVIDE_HIDDEN (__exidx_start = .);
     .ARM.exidx :
     {
       *(.ARM.exidx* .gnu.linkonce.armexidx.*)
-    } > rom2
+    } > rom
     PROVIDE_HIDDEN (__exidx_end = .);
 
     . = ALIGN(4);
