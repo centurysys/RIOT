@@ -85,7 +85,7 @@ extern "C" {
 #define UART_0_DEV          USART1
 #define UART_0_CLKEN()      (RCC->APB2ENR |= RCC_APB2ENR_USART1EN)
 #define UART_0_CLKDIS()     (RCC->APB2ENR &= ~(RCC_APB2ENR_USART1EN))
-#define UART_0_CLK          (30000000)          /* UART clock runs with 30MHz (F_CPU / 4) */
+#define UART_0_CLK          (60000000)          /* UART clock runs with 60MHz (F_CPU / 2) */
 #define UART_0_IRQ_CHAN     USART1_IRQn
 #define UART_0_ISR          isr_usart1
 /* UART 0 pin configuration */
