@@ -707,7 +707,8 @@ void rpl_recv_DIO(void)
             }
             else {
                 DEBUGF("my dodag has no preferred_parent yet - seems to be odd since I have a parent.\n");
-                rpl_global_repair(&dio_dodag, &ipv6_buf->srcaddr, byteorder_ntohs(rpl_dio_buf->rank));
+                my_dodag->version = dio_dodag.version;
+                rpl_global_repair(my_dodag, &ipv6_buf->srcaddr, byteorder_ntohs(rpl_dio_buf->rank));
             }
 
             return;
@@ -753,7 +754,7 @@ void rpl_recv_DIO(void)
 
     /* update parent rank */
     parent->rank = byteorder_ntohs(rpl_dio_buf->rank);
-    rpl_parent_update(parent);
+    rpl_parent_update(my_dodag, parent);
 
     if (my_dodag->my_preferred_parent == NULL) {
         DEBUGF("My dodag has no preferred_parent yet - seems to be odd since I have a parent...\n");
@@ -874,15 +875,11 @@ void rpl_recv_DAO(void)
 
 void rpl_recv_DIS(void)
 {
-    rpl_dodag_t *my_dodag = rpl_get_my_dodag();
-
-    if (my_dodag == NULL) {
-        return;
-    }
-
     ipv6_buf = get_rpl_ipv6_buf();
     rpl_dis_buf = get_rpl_dis_buf();
     int len = DIS_BASE_LEN;
+    rpl_dodag_t *dodag, *end;
+    uint8_t options_missing = 1;
 
     while (len < (NTOHS(ipv6_buf->length) - ICMPV6_HDR_LEN)) {
         rpl_opt_buf = get_rpl_opt_buf(len);
@@ -899,6 +896,7 @@ void rpl_recv_DIS(void)
             }
 
             case (RPL_OPT_SOLICITED_INFO): {
+                options_missing = 0;
                 len += RPL_OPT_SOLICITED_INFO_LEN;
 
                 /* extract and check */
@@ -909,21 +907,28 @@ void rpl_recv_DIS(void)
 
                 rpl_opt_solicited_buf = get_rpl_opt_solicited_buf(len);
 
-                if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_I_MASK) {
-                    if (my_dodag->instance->id != rpl_opt_solicited_buf->rplinstanceid) {
-                        return;
-                    }
-                }
+                for (dodag = rpl_dodags, end = dodag + RPL_MAX_DODAGS; dodag < end; dodag++) {
+                    if (dodag->joined) {
+                        if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_I_MASK) {
+                            if (dodag->instance->id != rpl_opt_solicited_buf->rplinstanceid) {
+                                continue;
+                            }
+                        }
 
-                if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_D_MASK) {
-                    if (!rpl_equal_id(&my_dodag->dodag_id, &rpl_opt_solicited_buf->dodagid)) {
-                        return;
-                    }
-                }
+                        if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_D_MASK) {
+                            if (!rpl_equal_id(&dodag->dodag_id, &rpl_opt_solicited_buf->dodagid)) {
+                                continue;
+                            }
+                        }
 
-                if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_V_MASK) {
-                    if (my_dodag->version != rpl_opt_solicited_buf->version) {
-                        return;
+                        if (rpl_opt_solicited_buf->VID_Flags & RPL_DIS_V_MASK) {
+                            if (dodag->version != rpl_opt_solicited_buf->version) {
+                                continue;
+                            }
+                        }
+
+                        rpl_send_DIO(dodag, &ipv6_buf->srcaddr);
+                        trickle_reset_timer(&dodag->trickle);
                     }
                 }
 
@@ -935,8 +940,14 @@ void rpl_recv_DIS(void)
         }
     }
 
-    rpl_send_DIO(my_dodag, &ipv6_buf->srcaddr);
-
+    if (options_missing) {
+        for (dodag = rpl_dodags, end = dodag + RPL_MAX_DODAGS; dodag < end; dodag++) {
+            if (dodag->joined) {
+                rpl_send_DIO(dodag, &ipv6_buf->srcaddr);
+                trickle_reset_timer(&dodag->trickle);
+            }
+        }
+    }
 }
 
 void rpl_recv_DAO_ACK(void)
