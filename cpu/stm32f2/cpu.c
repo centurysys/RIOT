@@ -21,11 +21,6 @@
 #include "cpu.h"
 #include "periph_conf.h"
 
-/**
- * @name Pattern to write into the Coprocessor Access Control Register to allow full FPU access
- */
-#define FULL_FPU_ACCESS         (0x00f00000)
-
 
 static void cpu_clock_init(void);
 
@@ -34,9 +29,6 @@ static void cpu_clock_init(void);
  */
 void cpu_init(void)
 {
-    /* give full access to the FPU */
-    SCB->CPACR |= (uint32_t)FULL_FPU_ACCESS;
-
     /* configure the vector table location to internal flash */
     SCB->VTOR = FLASH_BASE;
 
@@ -80,11 +72,13 @@ static void cpu_clock_init(void)
     /* disable all clock interrupts */
     RCC->CIR = 0;
 
+#if 0
     /* enable the HSE clock */
     RCC->CR |= RCC_CR_HSEON;
 
     /* wait for HSE to be ready */
     while (!(RCC->CR & RCC_CR_HSERDY));
+#endif
 
     /* setup power module */
 
@@ -108,7 +102,8 @@ static void cpu_clock_init(void)
     /* reset PLL config register */
     RCC->PLLCFGR = 0;
     /* set HSE as source for the PLL */
-    RCC->PLLCFGR |= RCC_PLLCFGR_PLLSRC_HSE;
+    /* RCC->PLLCFGR |= RCC_PLLCFGR_PLLSRC_HSE;*/
+    RCC->PLLCFGR |= RCC_PLLCFGR_PLLSRC_HSI;
     /* set division factor for main PLL input clock */
     RCC->PLLCFGR |= (CLOCK_PLL_M & 0x3F);
     /* set main PLL multiplication factor for VCO */
@@ -132,7 +127,7 @@ static void cpu_clock_init(void)
     /* enable data cache */
     FLASH->ACR |= FLASH_ACR_DCEN;
     /* enable pre-fetch buffer */
-    // FLASH->ACR |= FLASH_ACR_PRFTEN;
+    FLASH->ACR |= FLASH_ACR_PRFTEN;
     /* set flash latency */
     FLASH->ACR &= ~FLASH_ACR_LATENCY;
     FLASH->ACR |= CLOCK_FLASH_LATENCY;
