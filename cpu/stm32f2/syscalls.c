@@ -245,6 +245,8 @@ int _write_r(struct _reent *r, int fd, const void *data, unsigned int count)
 {
     char *c = (char*)data;
     for (int i = 0; i < count; i++) {
+        if (c[i] == '\n')
+            uart_write_blocking(STDIO, '\r');
         uart_write_blocking(STDIO, c[i]);
     }
     return count;
