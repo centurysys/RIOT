@@ -145,6 +145,7 @@ static int shell_readc(void)
 static void shell_putchar(int c)
 {
     (void) putchar(c);
+    fflush(0);
 }
 
 int main(void)
