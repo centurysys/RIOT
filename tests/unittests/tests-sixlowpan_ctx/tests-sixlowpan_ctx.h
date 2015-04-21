@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Martine Lenders <mlenders@inf.fu-berlin.de>
+ * Copyright (C) 2015 Martine Lenders
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -10,13 +10,13 @@
  * @addtogroup  unittests
  * @{
  *
- * @file
- * @brief       Unittests for the ``netif`` module
+ * @file        tests-sixlowpan_ctx.h
+ * @brief       Unittests for the ``sixlowpan_ctx`` module
  *
  * @author      Martine Lenders <mlenders@inf.fu-berlin.de>
  */
-#ifndef TESTS_NETIF_H_
-#define TESTS_NETIF_H_
+#ifndef TESTS_SIXLOWPAN_CTX_H_
+#define TESTS_SIXLOWPAN_CTX_H_
 
 #include "embUnit.h"
 
@@ -27,11 +27,11 @@ extern "C" {
 /**
  * @brief   The entry point of this test suite.
  */
-void tests_netif(void);
+void tests_sixlowpan_ctx(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* TESTS_NETIF_H_ */
+#endif /* TESTS_SIXLOWPAN_CTX_H_ */
 /** @} */
