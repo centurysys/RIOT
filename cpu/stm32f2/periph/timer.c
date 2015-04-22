@@ -63,7 +63,7 @@ int timer_init(tim_t dev, unsigned int ticks_per_us, void (*callback)(int))
             NVIC_SetPriority(TIMER_1_IRQ_CHAN, TIMER_IRQ_PRIO);
             /* select timer */
             timer = TIMER_1_DEV;
-            timer->PSC = TIMER_0_PRESCALER * ticks_per_us;
+            timer->PSC = TIMER_1_PRESCALER * ticks_per_us;
             break;
 #endif
         case TIMER_UNDEFINED:
@@ -92,7 +92,7 @@ int timer_init(tim_t dev, unsigned int ticks_per_us, void (*callback)(int))
 
 int timer_set(tim_t dev, int channel, unsigned int timeout)
 {
-    int now = timer_read(dev);
+    unsigned int now = timer_read(dev);
     return timer_set_absolute(dev, channel, now + timeout - 1);
 }
 
@@ -303,28 +303,47 @@ void TIMER_1_ISR(void)
     irq_handler(TIMER_1, TIMER_1_DEV);
 }
 
+static uint16_t TIM_SR_CCIF[] = { TIM_SR_CC1IF,
+                                  TIM_SR_CC2IF,
+                                  TIM_SR_CC3IF,
+                                  TIM_SR_CC4IF };
+static uint16_t TIM_DIER_CCIE[] = { TIM_DIER_CC1IE,
+                                    TIM_DIER_CC2IE,
+                                    TIM_DIER_CC3IE,
+                                    TIM_DIER_CC4IE };
+
 static inline void irq_handler(tim_t timer, TIM_TypeDef *dev)
 {
-    if (dev->SR & TIM_SR_CC1IF) {
-        dev->DIER &= ~TIM_DIER_CC1IE;
-        dev->SR &= ~TIM_SR_CC1IF;
-        config[timer].cb(0);
+    uint16_t SR, DIER, match;
+    int i;
+
+    SR = dev->SR;
+    DIER = dev->DIER;
+    match = 0;
+
+    if (SR & TIM_SR_UIF) {
+        SR &= ~TIM_SR_UIF;
     }
-    else if (dev->SR & TIM_SR_CC2IF) {
-        dev->DIER &= ~TIM_DIER_CC2IE;
-        dev->SR &= ~TIM_SR_CC2IF;
-        config[timer].cb(1);
+
+    for (i = 0; i < 4; i++) {
+        if (SR & TIM_SR_CCIF[i]) {
+            if (DIER & TIM_DIER_CCIE[i])
+                match |= 1 << i;
+
+            DIER &= ~TIM_DIER_CCIE[i];
+            SR &= ~TIM_SR_CCIF[i];
+        }
     }
-    else if (dev->SR & TIM_SR_CC3IF) {
-        dev->DIER &= ~TIM_DIER_CC3IE;
-        dev->SR &= ~TIM_SR_CC3IF;
-        config[timer].cb(2);
+
+    dev->SR = SR;
+    dev->DIER = DIER;
+
+    for (i = 0; i < 4; i++) {
+        if (match & (1 << i)) {
+            config[timer].cb(i);
+        }
     }
-    else if (dev->SR & TIM_SR_CC4IF) {
-        dev->DIER &= ~TIM_DIER_CC4IE;
-        dev->SR &= ~TIM_SR_CC4IF;
-        config[timer].cb(3);
-    }
+
     if (sched_context_switch_request) {
         thread_yield();
     }
