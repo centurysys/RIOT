@@ -101,6 +101,9 @@ endif
 ifneq (,$(filter ng_sixlowpan_ctx,$(USEMODULE)))
     DIRS += net/network_layer/ng_sixlowpan/ctx
 endif
+ifneq (,$(filter ng_sixlowpan_frag,$(USEMODULE)))
+    DIRS += net/network_layer/ng_sixlowpan/frag
+endif
 ifneq (,$(filter ng_sixlowpan_netif,$(USEMODULE)))
     DIRS += net/network_layer/ng_sixlowpan/netif
 endif
@@ -121,6 +124,9 @@ ifneq (,$(filter ng_pktdump,$(USEMODULE)))
 endif
 ifneq (,$(filter fib,$(USEMODULE)))
     DIRS += net/network_layer/fib
+endif
+ifneq (,$(filter ng_udp,$(USEMODULE)))
+    DIRS += net/transport_layer/ng_udp
 endif
 
 DIRS += $(dir $(wildcard $(addsuffix /Makefile, ${USEMODULE})))
