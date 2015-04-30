@@ -72,7 +72,7 @@ static uint16_t _calc_csum(ng_pktsnip_t *hdr, ng_pktsnip_t *pseudo_hdr,
         payload = payload->next;
     }
     /* process applicable UDP header bytes */
-    csum = ng_inet_csum(csum, (uint8_t *)hdr->data, 6);
+    csum = ng_inet_csum(csum, (uint8_t *)hdr->data, sizeof(ng_udp_hdr_t));
 
     switch (pseudo_hdr->type) {
 #ifdef MODULE_NG_IPV6
@@ -91,7 +91,7 @@ static uint16_t _calc_csum(ng_pktsnip_t *hdr, ng_pktsnip_t *pseudo_hdr,
 
 static void _receive(ng_pktsnip_t *pkt)
 {
-    ng_pktsnip_t *udp;
+    ng_pktsnip_t *udp, *ipv6;
     ng_udp_hdr_t *hdr;
     uint16_t csum;
     uint32_t port;
@@ -113,9 +113,10 @@ static void _receive(ng_pktsnip_t *pkt)
     }
     hdr = (ng_udp_hdr_t *)udp->data;
 
+    LL_SEARCH_SCALAR(pkt, ipv6, type, NG_NETTYPE_IPV6);
+
     /* validate checksum */
-    csum = _calc_csum(udp, udp->next, pkt);     /* TODO: what about extension headers? */
-    if (byteorder_ntohs(hdr->checksum) != csum) {
+    if (_calc_csum(udp, ipv6, pkt)) {
         DEBUG("udp: received packet with invalid checksum, dropping it\n");
         ng_pktbuf_release(pkt);
         return;
@@ -148,19 +149,19 @@ static void _send(ng_pktsnip_t *pkt)
     LL_SEARCH_SCALAR(pkt, udp_snip, type, NG_NETTYPE_UDP);
     udp_snip = ng_pktbuf_start_write(udp_snip);
     if (udp_snip == NULL) {
-        DEBUG("udp: cannot send packet, no UDP header found\n");
+        DEBUG("udp: cannot send packet: unable to allocate packet\n");
         ng_pktbuf_release(pkt);
         return;
     }
     hdr = (ng_udp_hdr_t *)udp_snip->data;
     /* fill in size field */
-    hdr->length = byteorder_htons(sizeof(ng_udp_hdr_t) + ng_pkt_len(udp_snip));
+    hdr->length = byteorder_htons(ng_pkt_len(udp_snip));
 
     /* and forward packet to the network layer */
     sendto = ng_netreg_lookup(pkt->type, NG_NETREG_DEMUX_CTX_ALL);
     /* throw away packet if no one is interested */
     if (sendto == NULL) {
-        DEBUG("udp: cannot send packet because network layer not found\n");
+        DEBUG("udp: cannot send packet: network layer not found\n");
         ng_pktbuf_release(pkt);
         return;
     }
