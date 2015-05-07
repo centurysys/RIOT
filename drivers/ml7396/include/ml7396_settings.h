@@ -1,0 +1,384 @@
+#ifndef ML7396_SETTINGS_H
+#define ML7396_SETTINGS_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define ML7396_RX_BUF_SIZE   3
+
+/* common */
+#define BIT(x)  (1 << (x))
+#define BANK(x) ((x) << 8)
+#define REG(x)  ((x) << 1)
+
+#define ML7396_REG_BANK_SEL	0x00
+#define ML7396_TST_ACEN         BANK(0x80)
+
+/* BANK 0 */
+#define ML7396_REG_RST_SET				(BANK(0) | REG(0x01))
+#define ML7396_REG_CLK_SET				(BANK(0) | REG(0x02))
+#define ML7396_REG_CLKOUT				(BANK(0) | REG(0x03))
+#define ML7396_REG_RATE_SET1			(BANK(0) | REG(0x04))
+#define ML7396_REG_RATE_SET2			(BANK(0) | REG(0x05))
+#define ML7396_REG_ADC_CLK_SET			(BANK(0) | REG(0x08) | ML7396_TST_ACEN)
+#define ML7396_REG_OSC_ADJ				(BANK(0) | REG(0x0b) | ML7396_TST_ACEN)
+#define ML7396_REG_RF_TEST_MODE		(BANK(0) | REG(0x0c) | ML7396_TST_ACEN)
+#define ML7396_REG_RF_STATE			(BANK(0) | REG(0x0f) | ML7396_TST_ACEN)
+#define ML7396_REG_FIFO_BANK			(BANK(0) | REG(0x10) | ML7396_TST_ACEN)
+#define ML7396_REG_PLL_LOCK_DETECT		(BANK(0) | REG(0x11) | ML7396_TST_ACEN)
+#define ML7396_REG_CCA_IGNORE_LEVEL	(BANK(0) | REG(0x12))
+#define ML7396_REG_CCA_LEVEL			(BANK(0) | REG(0x13))
+#define ML7396_REG_CCA_ABORT			(BANK(0) | REG(0x14))
+#define ML7396_REG_CCA_CNTRL			(BANK(0) | REG(0x15))
+#define ML7396_REG_ED_RSLT				(BANK(0) | REG(0x16))
+#define ML7396_REG_IDLE_WAIT_L			(BANK(0) | REG(0x17))
+#define ML7396_REG_IDLE_WAIT_H			(BANK(0) | REG(0x18))
+#define ML7396_REG_CCA_PROG_L			(BANK(0) | REG(0x19))
+#define ML7396_REG_CCA_PROG_H			(BANK(0) | REG(0x1a))
+#define ML7396_REG_ED_CNTRL			(BANK(0) | REG(0x1b))
+#define ML7396_REG_GAIN_MtoL			(BANK(0) | REG(0x1c))
+#define ML7396_REG_GAIN_LtoH			(BANK(0) | REG(0x1d))
+#define ML7396_REG_GAIN_HtoM			(BANK(0) | REG(0x1e))
+#define ML7396_REG_GAIN_MtoH			(BANK(0) | REG(0x1f))
+#define ML7396_REG_RSSI_ADJ_M			(BANK(0) | REG(0x20))
+#define ML7396_REG_RSSI_ADJ_L			(BANK(0) | REG(0x21))
+#define ML7396_REG_RSSI_STABLE_TIME	(BANK(0) | REG(0x22))
+#define ML7396_REG_RSSI_VAL_ADJ		(BANK(0) | REG(0x23))
+#define ML7396_REG_INT_SOURCE_GRP1		(BANK(0) | REG(0x24))
+#define ML7396_REG_INT_SOURCE_GRP2		(BANK(0) | REG(0x25))
+#define ML7396_REG_INT_SOURCE_GRP3		(BANK(0) | REG(0x26))
+#define ML7396_REG_INT_SOURCE_GRP4		(BANK(0) | REG(0x27))
+#define ML7396_REG_INT_PD_DATA_REQ		(BANK(0) | REG(0x28))
+#define ML7396_REG_INT_PD_DATA_IND		(BANK(0) | REG(0x29))
+#define ML7396_REG_INT_EN_GRP1			(BANK(0) | REG(0x2a))
+#define ML7396_REG_INT_EN_GRP2			(BANK(0) | REG(0x2b))
+#define ML7396_REG_INT_EN_GRP3			(BANK(0) | REG(0x2c))
+#define ML7396_REG_INT_EN_GRP4			(BANK(0) | REG(0x2d))
+#define ML7396_REG_CH_EN_L				(BANK(0) | REG(0x2e))
+#define ML7396_REG_CH_EN_H				(BANK(0) | REG(0x2f))
+#define ML7396_REG_IF_FREQ_AFC_H		(BANK(0) | REG(0x30))
+#define ML7396_REG_IF_FREQ_AFC_L		(BANK(0) | REG(0x31))
+#define ML7396_REG_BPF_AFC_ADJ_H		(BANK(0) | REG(0x32))
+#define ML7396_REG_BPF_AFC_ADJ_L		(BANK(0) | REG(0x33))
+#define ML7396_REG_AFC_CNTRL			(BANK(0) | REG(0x34))
+#define ML7396_REG_TX_ALARM_LH			(BANK(0) | REG(0x35))
+#define ML7396_REG_TX_ALARM_HL			(BANK(0) | REG(0x36))
+#define ML7396_REG_RX_ALARM_LH			(BANK(0) | REG(0x37))
+#define ML7396_REG_RX_ALARM_HL			(BANK(0) | REG(0x38))
+#define ML7396_REG_PREAMBLE_SET		(BANK(0) | REG(0x39))
+#define ML7396_REG_SFD1_SET1			(BANK(0) | REG(0x3a))
+#define ML7396_REG_SFD1_SET2			(BANK(0) | REG(0x3b))
+#define ML7396_REG_SFD1_SET3			(BANK(0) | REG(0x3c))
+#define ML7396_REG_SFD1_SET4			(BANK(0) | REG(0x3d))
+#define ML7396_REG_SFD2_SET1			(BANK(0) | REG(0x3e))
+#define ML7396_REG_SFD2_SET2			(BANK(0) | REG(0x3f))
+#define ML7396_REG_SFD2_SET3			(BANK(0) | REG(0x40))
+#define ML7396_REG_SFD2_SET4			(BANK(0) | REG(0x41))
+#define ML7396_REG_TX_PR_LEN			(BANK(0) | REG(0x42))
+#define ML7396_REG_RX_PR_LEN			(BANK(0) | REG(0x43))
+#define ML7396_REG_SYNC_CONDITION		(BANK(0) | REG(0x44))
+#define ML7396_REG_PACKET_MODE_SET		(BANK(0) | REG(0x45))
+#define ML7396_REG_FEC_CRC_SET			(BANK(0) | REG(0x46))
+#define ML7396_REG_DATA_SET			(BANK(0) | REG(0x47))
+#define ML7396_REG_CH0_FL				(BANK(0) | REG(0x48))
+#define ML7396_REG_CH0_FM				(BANK(0) | REG(0x49))
+#define ML7396_REG_CH0_FH				(BANK(0) | REG(0x4a))
+#define ML7396_REG_CH0_NA				(BANK(0) | REG(0x4b))
+#define ML7396_REG_CH_SPACE_L			(BANK(0) | REG(0x4c))
+#define ML7396_REG_CH_SPACE_H			(BANK(0) | REG(0x4d))
+#define ML7396_REG_F_DEV_L				(BANK(0) | REG(0x4e))
+#define ML7396_REG_F_DEV_H				(BANK(0) | REG(0x4f))
+#define ML7396_REG_ACK_TIMER_L			(BANK(0) | REG(0x50))
+#define ML7396_REG_ACK_TIMER_H			(BANK(0) | REG(0x51))
+#define ML7396_REG_ACK_TIMER_EN		(BANK(0) | REG(0x52))
+#define ML7396_REG_ACK_FRAME1			(BANK(0) | REG(0x53))
+#define ML7396_REG_ACK_FRAME2			(BANK(0) | REG(0x54))
+#define ML7396_REG_AUTO_ACK_SET		(BANK(0) | REG(0x55))
+#define ML7396_REG_PLL_MONO_DIO_SEL	(BANK(0) | REG(0x69))
+#define ML7396_REG_CH_SET				(BANK(0) | REG(0x6b))
+#define ML7396_REG_RF_STATUS			(BANK(0) | REG(0x6c))
+#define ML7396_REG_2DIV_GAIN_CNTRL		(BANK(0) | REG(0x6e))
+#define ML7396_REG_2DIV_SEARCH			(BANK(0) | REG(0x6f))
+#define ML7396_REG_2DIV_CNTRL			(BANK(0) | REG(0x71))
+#define ML7396_REG_2DIV_RSLT			(BANK(0) | REG(0x72))
+#define ML7396_REG_ANT1_ED				(BANK(0) | REG(0x73))
+#define ML7396_REG_ANT2_ED				(BANK(0) | REG(0x74))
+#define ML7396_REG_RF_CNTRL_SET		(BANK(0) | REG(0x75))
+#define ML7396_REG_RSSI_MON			(BANK(0) | REG(0x78))
+#define ML7396_REG_TEMP_MON			(BANK(0) | REG(0x79))
+#define ML7396_REG_RD_FIFO_LAST		(BANK(0) | REG(0x7c))
+#define ML7396_REG_WR_TX_FIFO			(BANK(0) | REG(0x7e))
+#define ML7396_REG_RD_RX_FIFO			(BANK(0) | REG(0x7f))
+
+/* BANK 1 */
+#define ML7396_REG_DEMAND_SET			(BANK(1) | REG(0x01))
+#define ML7396_REG_RSSI_ADJ			(BANK(1) | REG(0x02))
+#define ML7396_REG_RSSI_TEMP_OUT		(BANK(1) | REG(0x03))
+#define ML7396_REG_PA_ADJ1				(BANK(1) | REG(0x04))
+#define ML7396_REG_PA_ADJ2				(BANK(1) | REG(0x05))
+#define ML7396_REG_PA_ADJ3				(BANK(1) | REG(0x06))
+#define ML7396_REG_PA_CNTRL			(BANK(1) | REG(0x07))
+#define ML7396_REG_SW_OUT_RAMP_ADJ		(BANK(1) | REG(0x08))
+#define ML7396_REG_PLL_CP_ADJ			(BANK(1) | REG(0x09))
+#define ML7396_REG_IF_FREQ_H			(BANK(1) | REG(0x0a))
+#define ML7396_REG_IF_FREQ_L			(BANK(1) | REG(0x0b))
+#define ML7396_REG_IF_FREQ_CCA_H		(BANK(1) | REG(0x0c))
+#define ML7396_REG_IF_FREQ_CCA_L		(BANK(1) | REG(0x0d))
+#define ML7396_REG_BPF_ADJ_H			(BANK(1) | REG(0x0e))
+#define ML7396_REG_BPF_ADJ_L			(BANK(1) | REG(0x0f))
+#define ML7396_REG_BPF_CCA_ADJ_H		(BANK(1) | REG(0x10))
+#define ML7396_REG_BPF_CCA_ADJ_L		(BANK(1) | REG(0x11))
+#define ML7396_REG_RSSI_LPF_ADJ		(BANK(1) | REG(0x12))
+#define ML7396_REG_PA_REG_FINE_ADJ		(BANK(1) | REG(0x13))
+#define ML7396_REG_IQ_MAG_ADJ			(BANK(1) | REG(0x14))
+#define ML7396_REG_IQ_PHASE_ADJ		(BANK(1) | REG(0x15))
+#define ML7396_REG_VCO_CAL_MIN_FL		(BANK(1) | REG(0x16))
+#define ML7396_REG_VCO_CAL_MIN_FM		(BANK(1) | REG(0x17))
+#define ML7396_REG_VCO_CAL_MIN_FH		(BANK(1) | REG(0x18))
+#define ML7396_REG_VCO_CAL_MAX_N		(BANK(1) | REG(0x19))
+#define ML7396_REG_VCO_CAL_MIN			(BANK(1) | REG(0x1a))
+#define ML7396_REG_VCO_CAL_MAX			(BANK(1) | REG(0x1b))
+#define ML7396_REG_VCO_CAL				(BANK(1) | REG(0x1c))
+#define ML7396_REG_VCO_CAL_START		(BANK(1) | REG(0x1d))
+#define ML7396_REG_BPF_ADJ_OFFSET		(BANK(1) | REG(0x1e))
+#define ML7396_REG_ID_CODE				(BANK(1) | REG(0x2b) | ML7396_TST_ACEN)
+#define ML7396_REG_PA_REG_ADJ1			(BANK(1) | REG(0x33) | ML7396_TST_ACEN)
+#define ML7396_REG_PA_REG_ADJ2			(BANK(1) | REG(0x34) | ML7396_TST_ACEN)
+#define ML7396_REG_PA_REG_ADJ3			(BANK(1) | REG(0x35) | ML7396_TST_ACEN)
+#define ML7396_REG_PDD_LD				(BANK(1) | REG(0x39) | ML7396_TST_ACEN)
+#define ML7396_REG_PLL_CTRL			(BANK(1) | REG(0x3a) | ML7396_TST_ACEN)
+#define ML7396_REG_RX_ON_ADJ2			(BANK(1) | REG(0x3f) | ML7396_TST_ACEN)
+#define ML7396_REG_LNA_GAIN_ADJ_M		(BANK(1) | REG(0x49) | ML7396_TST_ACEN)
+#define ML7396_REG_LNA_GAIN_ADJ_L		(BANK(1) | REG(0x4a) | ML7396_TST_ACEN)
+#define ML7396_REG_MIN_GAIN_ADJ_H		(BANK(1) | REG(0x4d) | ML7396_TST_ACEN)
+#define ML7396_REG_MIN_GAIN_ADJ_M		(BANK(1) | REG(0x4e) | ML7396_TST_ACEN)
+#define ML7396_REG_MIN_GAIN_ADJ_L		(BANK(1) | REG(0x4f) | ML7396_TST_ACEN)
+#define ML7396_REG_BPF_GAIN_ADJ		(BANK(1) | REG(0x54) | ML7396_TST_ACEN)
+#define ML7396_REG_TX_OFF_ADJ1			(BANK(1) | REG(0x55) | ML7396_TST_ACEN)
+#define ML7396_REG_RSSI_SLOPE_ADJ		(BANK(1) | REG(0x5a) | ML7396_TST_ACEN)
+
+/* BANK 2 */
+#define ML7396_REG_NOISE_DET			(BANK(2) | REG(0x0e) | ML7396_TST_ACEN)
+#define ML7396_REG_SYNC_MODE			(BANK(2) | REG(0x12) | ML7396_TST_ACEN)
+#define ML7396_REG_PA_ON_ADJ			(BANK(2) | REG(0x1e) | ML7396_TST_ACEN)
+#define ML7396_REG_DATA_IN_ADJ			(BANK(2) | REG(0x1f) | ML7396_TST_ACEN)
+#define ML7396_REG_RX_ON_ADJ			(BANK(2) | REG(0x22) | ML7396_TST_ACEN)
+#define ML7396_REG_RXD_ADJ				(BANK(2) | REG(0x24) | ML7396_TST_ACEN)
+#define ML7396_REG_RATE_ADJ1			(BANK(2) | REG(0x2a) | ML7396_TST_ACEN)
+#define ML7396_REG_RATE_ADJ2			(BANK(2) | REG(0x2b) | ML7396_TST_ACEN)
+#define ML7396_REG_RAMP_CNTRL			(BANK(2) | REG(0x2c) | ML7396_TST_ACEN)
+#define ML7396_REG_BPF_CAP1			(BANK(2) | REG(0x2d) | ML7396_TST_ACEN)
+#define ML7396_REG_BPF_CAP2			(BANK(2) | REG(0x2e) | ML7396_TST_ACEN)
+#define ML7396_REG_BPF_ADJ1			(BANK(2) | REG(0x2f) | ML7396_TST_ACEN)
+#define ML7396_REG_BPF_ADJ2			(BANK(2) | REG(0x30) | ML7396_TST_ACEN)
+#define ML7396_REG_ADDFILCNTRL			(BANK(2) | REG(0x60))
+#define ML7396_REG_PANID_L				(BANK(2) | REG(0x61))
+#define ML7396_REG_PANID_H				(BANK(2) | REG(0x62))
+#define ML7396_REG_64ADDR1				(BANK(2) | REG(0x63))
+#define ML7396_REG_64ADDR2				(BANK(2) | REG(0x64))
+#define ML7396_REG_64ADDR3				(BANK(2) | REG(0x65))
+#define ML7396_REG_64ADDR4				(BANK(2) | REG(0x66))
+#define ML7396_REG_64ADDR5				(BANK(2) | REG(0x67))
+#define ML7396_REG_64ADDR6				(BANK(2) | REG(0x68))
+#define ML7396_REG_64ADDR7				(BANK(2) | REG(0x69))
+#define ML7396_REG_64ADDR8				(BANK(2) | REG(0x6a))
+#define ML7396_REG_SHT_ADDR0_L			(BANK(2) | REG(0x6b))
+#define ML7396_REG_SHT_ADDR0_H			(BANK(2) | REG(0x6c))
+#define ML7396_REG_SHT_ADDR1_L			(BANK(2) | REG(0x6d))
+#define ML7396_REG_SHT_ADDR1_H			(BANK(2) | REG(0x6e))
+#define ML7396_REG_DISCARD_COUNT_L		(BANK(2) | REG(0x6f))
+#define ML7396_REG_DISCARD_COUNT_H		(BANK(2) | REG(0x70))
+
+
+/*
+ * BANK 0 Registers
+ */
+
+/* 0x01: RST_SET */
+#define RST3_EN	BIT(7)
+#define RST2_EN	BIT(6)
+#define RST1_EN	BIT(5)
+#define RST0_EN	BIT(4)
+#define RST3		BIT(3)
+#define RST2		BIT(2)
+#define RST1		BIT(1)
+#define RST0		BIT(0)
+
+/* 0x02: CLK_SET */
+#define CLK_Done	BIT(7)
+#define TCXO_EN	BIT(6)
+#define SLEEP_EN	BIT(5)
+#define CLKOUT_EN	BIT(4)
+#define CLK3_EN	BIT(3)
+#define CLK2_EN	BIT(2)
+#define CLK1_EN	BIT(1)
+#define CLK0_EN	BIT(0)
+
+/* 0x08: ADC_CLK_SET */
+#define OSC_W_SET(x)	((x) << 6)
+#define ADC_CLK_SET	BIT(4)
+
+/* 0x11: PLL_LOCK_DETECT */
+#define PLL_LD_EN	BIT(7)
+
+/* 0x15: CCA_CNTRL */
+#define CCA_AUTO_EN		BIT(7)
+#define CCA_LOOP_STOP		BIT(6)
+#define CCA_LOOP_START		BIT(5)
+#define CCA_EN				BIT(4)
+#define CCA_IDLE_EN		BIT(3)
+#define CCA_DONE			BIT(2)
+#define CCA_RSLT(x)		((x) & 0x03)
+#define CCA_RSLT_ONGOING_ED	CCA_RSLT(3)
+#define CCA_RSLT_ONGOING_IDLE	CCA_RSLT(2)
+#define CCA_RSLT_BUSY			CCA_RSLT(1)
+#define CCA_RSLT_IDLE			CCA_RSLT(0)
+
+/* 0x1b: ED_CNTRL */
+#define ED_CALC_EN		BIT(7)
+#define ED_DONE		BIT(4)
+#define ED_AVG(x)		((x) & 0x07)
+#define ED_AVG_1		ED_AVG(0)
+#define ED_AVG_2		ED_AVG(1)
+#define ED_AVG_4		ED_AVG(2)
+#define ED_AVG_8		ED_AVG(3)
+#define ED_AVG_15		ED_AVG(4)
+#define ED_AVG_16		ED_AVG(5)
+
+/* 0x1e: GAIN_HtoM */
+#define GC_FIX_EN		BIT(7)
+
+/* 0x24: INT_SOURCE_GRP1 */
+#define INT1_FIFO_CLR1			BIT(7)
+#define INT1_FIFO_CLR0			BIT(6)
+#define INT1_FIFO_FULL			BIT(5)
+#define INT1_FIFO_EMPTY		BIT(4)
+#define INT1_PAKCET_DISCARD	BIT(3)
+#define INT1_VCO_DONE			BIT(2)
+#define INT1_CLK_STABLE		BIT(0)
+
+/* 0x25: INT_SOURCE_GRP2 */
+#define INT2_TXFIFO_ERR		BIT(7)
+#define INT2_RXFIFO_ERR		BIT(6)
+#define INT2_TXLEN_ERR			BIT(5)
+#define INT2_RXLEN_ERR			BIT(4)
+#define INT2_SFD_DETECT		BIT(3)
+#define INT2_RFSTAT_CHANGE		BIT(2)
+#define INT2_DIVERSITY			BIT(1)
+#define INT2_CCA_COMPLETE		BIT(0)
+
+/* 0x26: INT_SOURCE_GRP3 */
+#define INT3_TXFIFO1_REQ		BIT(7)
+#define INT3_TXFIFO0_REQ		BIT(6)
+#define INT3_RXFIFO1_CRCERR	BIT(5)
+#define INT3_RXFIFO0_CRCERR	BIT(4)
+#define INT3_RXFIFO1_DONE		BIT(3)
+#define INT3_RXFIFO0_DONE		BIT(2)
+#define INT3_TXFIFO1_DONE		BIT(1)
+#define INT3_TXFIFO0_DONE		BIT(0)
+
+/* 0x27: INT_SOURCE_GRP4 */
+#define INT4_PLL_UNLOCK		BIT(1)
+#define INT4_AUTOACK_READY		BIT(0)
+
+/* 0x28: PD_DATA_REQ */
+#define PD_DATA_REQ1			BIT(5)
+#define PD_DATA_CFM1			BIT(4)
+#define PD_DATA_REQ0			BIT(1)
+#define PD_DATA_CFM0			BIT(0)
+
+/* 0x29: PD_DATA_IND */
+#define PD_DATA_IND1			BIT(5)
+#define CRC_RSLT1				BIT(4)
+#define PD_DATA_IND0			BIT(1)
+#define CRC_RSLT0				BIT(0)
+
+/* 0x45: PACKET_MODE_SET */
+#define FIFO_ADR_EN			BIT(7)
+#define MRFSKSFD				BIT(6)
+#define ADDFIL_NG_SET			BIT(5)
+#define WHITENING				BIT(4)
+#define ED_NOTICE				BIT(3)
+#define AUTO_TX				BIT(2)
+#define IEEE_MODE_802154d		(0)
+#define IEEE_MODE_802154g		BIT(1)
+#define ADDFIL_IDLE_DET		BIT(0)
+
+/* 0x52: ACK_TIMER_EN */
+#define TX_DONE_RX				BIT(5)
+#define TX_DONE_OFF			BIT(4)
+#define ACK_TIMER_EN			BIT(0)
+
+/* 0x55: AUTO_ACK_SET */
+#define RX_ACK_CANCEL			BIT(7)
+#define AUTO_RX_EN				BIT(6)
+#define AUTO_ACK_EN			BIT(4)
+#define ACK_SEND				BIT(1)
+#define ACK_STOP				BIT(0)
+
+/* 0x69: PLL_MON/DIO_SEL */
+#define INT_TIM_CTRL			BIT(6)
+#define PLL_LD					BIT(4)
+#define DIO_EN					BIT(1)
+#define RX_FIFO_MON			BIT(0)
+
+/* 0x6c: RF_STATUS */
+#define GET_TRX(x)				(((x) & 0xf) << 4)
+#define SET_TRX(x)				(((x) & 0xf) << 0)
+#define STAT_RX_ON				(GET_TRX(0b0110))
+#define STAT_TRX_OFF			(GET_TRX(0b1000))
+#define STAT_TX_ON				(GET_TRX(0b1001))
+#define SET_FORCE_TRX_OFF		(SET_TRX(0b0011))
+#define SET_RX_ON				(SET_TRX(0b0110))
+#define SET_TRX_OFF			(SET_TRX(0b1000))
+#define SET_TX_ON				(SET_TRX(0b1001))
+
+
+/*
+ * BANK 1 Registers
+ */
+
+/*
+ * BANK 2 Registers
+ */
+
+/* 0x60: ADDFIL_CNTRL */
+#define MASK_SET(x)	(((x) & 0x7) << 5)
+#define SHT_ADD1_EN	BIT(4)
+#define SHT_ADD0_EN	BIT(3)
+#define EXT_ADD_EN		BIT(2)
+#define PANID_EN		BIT(1)
+#define IGB_EN			BIT(0)
+
+
+/* Interrupts */
+#define INTERRUPT(x) (1 << (x))
+#define INT_PLL_UNLOCK		INTERRUPT(8 * 3 + 1)
+#define INT_AUTOACK_READY	INTERRUPT(8 * 3 + 0)
+#define INT_TXFIFO1_REQ	INTERRUPT(8 * 2 + 7)
+#define INT_TXFIFO0_REQ	INTERRUPT(8 * 2 + 6)
+#define INT_RXFIFO1_CRCERR	INTERRUPT(8 * 2 + 5)
+#define INT_RXFIFO0_CRCERR	INTERRUPT(8 * 2 + 4)
+#define INT_RXFIFO1_DONE	INTERRUPT(8 * 2 + 3)
+#define INT_RXFIFO0_DONE	INTERRUPT(8 * 2 + 2)
+#define INT_TXFIFO1_DONE	INTERRUPT(8 * 2 + 1)
+#define INT_TXFIFO0_DONE	INTERRUPT(8 * 2 + 0)
+#define INT_TXFIFO_ERR		INTERRUPT(8 * 1 + 7)
+#define INT_RXFIFO_ERR		INTERRUPT(8 * 1 + 6)
+#define INT_TXLEN_ERR		INTERRUPT(8 * 1 + 5)
+#define INT_RXLEN_ERR		INTERRUPT(8 * 1 + 4)
+#define INT_SFD_DETECT		INTERRUPT(8 * 1 + 3)
+#define INT_RFSTAT_CHANGE	INTERRUPT(8 * 1 + 2)
+#define INT_DIVERSITY		INTERRUPT(8 * 1 + 1)
+#define INT_CCA_COMPLETE	INTERRUPT(8 * 1 + 0)
+#define INT_FIFO_CLR1		INTERRUPT(7)
+#define INT_FIFO_CLR0		INTERRUPT(6)
+#define INT_FIFO_FULL		INTERRUPT(5)
+#define INT_FIFO_EMPTY		INTERRUPT(4)
+#define INT_PAKCET_DISCARD	INTERRUPT(3)
+#define INT_VCO_DONE		INTERRUPT(2)
+#define INT_CLK_STABLE		INTERRUPT(0)
+#define ML7396_INT_ALL		0x03ffffff
+
+#endif /* ML7396_SETTINGS_H */
