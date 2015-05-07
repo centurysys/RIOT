@@ -57,6 +57,12 @@
 #define TEXT_SIZE           AT86RF231_MAX_DATA_LENGTH
 #define _TC_TYPE            TRANSCEIVER_AT86RF231
 
+#elif defined( MODULE_ML7396 )
+#include "ml7396.h"
+#include "ieee802154_frame.h"
+#define TEXT_SIZE           ML7396_MAX_DATA_LENGTH
+#define _TC_TYPE            TRANSCEIVER_ML7396
+
 #elif defined( MODULE_NATIVENET )
 #include "nativenet.h"
 #define TEXT_SIZE           NATIVE_MAX_DATA_LENGTH
@@ -69,6 +75,12 @@
 #include "ieee802154_frame.h"
 #define TEXT_SIZE           MACA_MAX_PAYLOAD_SIZE
 #define _TC_TYPE            TRANSCEIVER_MC1322X
+
+#elif defined( MODULE_ML7396 )
+#include "ml7396.h"
+#include "ieee802154_frame.h"
+#define TEXT_SIZE           ML7396_MAX_DATA_LENGTH
+#define _TC_TYPE            TRANSCEIVER_ML7396
 #endif
 
 /* checked for type safety */
@@ -237,7 +249,7 @@ int _transceiver_send_handler(int argc, char **argv)
         return 1;
     }
 
-#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X
+#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X || MODULE_ML7396
     ieee802154_packet_t p;
     uint16_t short_addr;
 #else
@@ -252,7 +264,7 @@ int _transceiver_send_handler(int argc, char **argv)
     memset(text_msg, 0, TEXT_SIZE);
     strcpy(text_msg, argv[2]);
 
-#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X
+#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X || MODULE_ML7396
     memset(&p, 0, sizeof(ieee802154_packet_t));
     p.frame.payload = (uint8_t*) text_msg;
     p.frame.payload_len = strlen(text_msg) + 1;
@@ -278,7 +290,7 @@ int _transceiver_send_handler(int argc, char **argv)
     mesg.type = SND_PKT;
     mesg.content.ptr = (char *) &tcmd;
 
-#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X
+#if MODULE_AT86RF231 || MODULE_CC2420 || MODULE_MC1322X || MODULE_ML7396
     printf("[transceiver] Sending packet of length %" PRIu16 " to %" PRIu16 ": %s\n", p.frame.payload_len, p.frame.dest_addr[1], (char*) p.frame.payload);
 #else
     printf("[transceiver] Sending packet of length %" PRIu16 " to %" PRIu16 ": %s\n", p.length, p.dst, (char*) p.data);
