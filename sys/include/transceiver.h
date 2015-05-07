@@ -87,6 +87,13 @@
 #endif
 #endif
 
+#ifdef MODULE_ML7396
+#include "ml7396.h"
+#ifndef TRANSCEIVER_DEFAULT
+#define TRANSCEIVER_DEFAULT TRANSCEIVER_ML7396
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -147,6 +154,13 @@ extern "C" {
 #define TRANSCEIVER_BROADCAST  NATIVE_BROADCAST_ADDRESS
 #endif
 #endif
+#ifdef MODULE_ML7396
+#if (ML7396_MAX_DATA_LENGTH > PAYLOAD_SIZE)
+#undef PAYLOAD_SIZE
+#define PAYLOAD_SIZE (ML7396_MAX_DATA_LENGTH)
+#define TRANSCEIVER_BROADCAST  ML7396_BROADCAST_ADDRESS
+#endif
+#endif
 /**
  * @}
  */
@@ -178,6 +192,7 @@ extern "C" {
 #define TRANSCEIVER_MC1322X     (0x08)      /**< MC1322X transceivers */
 #define TRANSCEIVER_NATIVE      (0x10)      /**< NATIVE transceivers */
 #define TRANSCEIVER_AT86RF231   (0x20)      /**< AT86RF231 transceivers */
+#define TRANSCEIVER_ML7396      (0x40)      /**< ML7396 transceivers */
 /**
  * @}
  */
@@ -203,6 +218,7 @@ enum transceiver_msg_type_t {
     RCV_PKT_MC1322X,       /**< packet was received by mc1322x transceiver */
     RCV_PKT_NATIVE,        /**< packet was received by native transceiver */
     RCV_PKT_AT86RF231,     /**< packet was received by AT86RF231 transceiver */
+    RCV_PKT_ML7396,        /**< packet was received by ML7396 transceiver */
 
     /* Message types for transceiver <-> upper layer communication */
     PKT_PENDING,    /**< packet pending in transceiver buffer */
