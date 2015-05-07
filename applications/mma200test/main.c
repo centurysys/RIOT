@@ -22,6 +22,8 @@
 //#include "misc_cmds.h"
 #include "ml7396_cmds.h"
 
+#include "uart1.h"
+
 extern void init_mma200(void);
 
 static shell_command_t commands[] = {
@@ -53,22 +55,24 @@ static shell_command_t commands[] = {
 static int shell_readc(void)
 {
     char c = 0;
-    (void) posix_read(uart0_handler_pid, &c, 1);
+    posix_read(uart0_handler_pid, &c, 1);
     return c;
 }
 
 static void shell_putchar(int c)
 {
-    (void) putchar(c);
+    putchar(c);
     fflush(0);
 }
 
 int main(void)
 {
     shell_t shell;
-    (void) posix_open(uart0_handler_pid, 0);
+    posix_open(uart0_handler_pid, 0);
 
-    (void) puts("Welcome to RIOT!");
+    puts("Welcome to RIOT!");
+
+    uart1_thread_init();
 
     shell_init(&shell, commands, UART0_BUFSIZE, shell_readc, shell_putchar);
 
