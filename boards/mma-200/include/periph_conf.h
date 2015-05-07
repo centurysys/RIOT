@@ -298,13 +298,13 @@ extern "C" {
 #define GPIO_IRQ_PRIO       1
 
 /* IRQ config */
-#define GPIO_IRQ_0          GPIO_0
-#define GPIO_IRQ_1          GPIO_1
-#define GPIO_IRQ_2          GPIO_2
-#define GPIO_IRQ_3          GPIO_3
-#define GPIO_IRQ_4          GPIO_4
-#define GPIO_IRQ_5          GPIO_5
-#define GPIO_IRQ_6          GPIO_6
+#define GPIO_IRQ_0          -1
+#define GPIO_IRQ_1          -1
+#define GPIO_IRQ_2          GPIO_10
+#define GPIO_IRQ_3          -1
+#define GPIO_IRQ_4          -1
+#define GPIO_IRQ_5          -1
+#define GPIO_IRQ_6          -1
 #define GPIO_IRQ_7          -1/* not configured */
 #define GPIO_IRQ_8          -1/* not configured */
 #define GPIO_IRQ_9          -1/* not configured */
