@@ -56,4 +56,4 @@ export LINKFLAGS += -specs=nano.specs -lc -lnosys
 endif
 
 # export board specific includes to the global includes-listing
-export INCLUDES += -I$(RIOTBOARD)/$(BOARD)/include
+export INCLUDES += -I$(RIOTBOARD)/$(BOARD)/include -I$(RIOTBASE)/drivers/ml7396/include -I$(RIOTBASE)/sys/net/include

@@ -39,6 +39,18 @@ extern "C" {
 #define HW_TIMER            TIMER_0
 
 /**
+ * @name Define the interface to the ML7396 radio
+ * @{
+ */
+#define ML7396_SPI       SPI_0
+#define ML7396_CS        GPIO_7
+#define ML7396_INT       GPIO_10
+#define ML7396_RESET     GPIO_8
+#define ML7396_TCXO      GPIO_9
+#define ML7396_SPI_CLK   SPI_SPEED_15MHZ
+/** @} */
+
+/**
  * @name Define UART device and baudrate for stdio
  * @{
  */
@@ -68,6 +80,11 @@ extern "C" {
 #define LED_GREEN_OFF       LD0_OFF
 #define LED_GREEN_TOGGLE    LD0_TOGGLE
 /** @} */
+
+/**
+ * @brief define radio packet length
+ */
+typedef uint8_t radio_packet_length_t;
 
 /**
  * @brief Initialize board specific hardware, including clock, LEDs and std-IO

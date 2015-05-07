@@ -290,10 +290,10 @@ extern "C" {
 #define GPIO_4_EN           1
 #define GPIO_5_EN           1
 #define GPIO_6_EN           1
-#define GPIO_7_EN           0
-#define GPIO_8_EN           0
-#define GPIO_9_EN           0
-#define GPIO_10_EN          0
+#define GPIO_7_EN           1
+#define GPIO_8_EN           1
+#define GPIO_9_EN           1
+#define GPIO_10_EN          1
 #define GPIO_11_EN          0
 #define GPIO_IRQ_PRIO       1
 
@@ -357,6 +357,30 @@ extern "C" {
 #define GPIO_6_CLK          2
 #define GPIO_6_EXTI_CFG()   (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI4_PC)
 #define GPIO_6_IRQ          EXTI4_IRQn
+/* GPIO channel 7 config */
+#define GPIO_7_PORT         GPIOA                   /* SPI CS */
+#define GPIO_7_PIN          4
+#define GPIO_7_CLK          0
+#define GPIO_7_EXTI_CFG()   (SYSCFG->EXTICR[2] |= SYSCFG_EXTICR2_EXTI4_PA)
+#define GPIO_7_IRQ          EXTI4_IRQn
+/* GPIO channel 8 config */
+#define GPIO_8_PORT         GPIOC                   /* SPI nRESET */
+#define GPIO_8_PIN          2
+#define GPIO_8_CLK          2
+#define GPIO_8_EXTI_CFG()   (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI2_PC)
+#define GPIO_8_IRQ          EXTI4_IRQn
+/* GPIO channel 9 config */
+#define GPIO_9_PORT         GPIOB                   /* SPI TCXO */
+#define GPIO_9_PIN          0
+#define GPIO_9_CLK          1
+#define GPIO_9_EXTI_CFG()   (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI0_PB)
+#define GPIO_9_IRQ          EXTI4_IRQn
+/* GPIO channel 10 config */
+#define GPIO_10_PORT        GPIOA                   /* ML7396 Int */
+#define GPIO_10_PIN         2
+#define GPIO_10_CLK         0
+#define GPIO_10_EXTI_CFG()  (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI2_PA)
+#define GPIO_10_IRQ         EXTI2_IRQn
 
 /** @} */
 
