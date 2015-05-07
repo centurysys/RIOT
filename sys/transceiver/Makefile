@@ -6,6 +6,10 @@ ifneq (,$(filter at86rf231,$(USEMODULE)))
 	INCLUDES += -I$(RIOTBASE)/sys/net/include
 endif
 
+ifneq (,$(filter ml7396,$(USEMODULE)))
+	INCLUDES += -I$(RIOTBASE)/sys/net/include
+endif
+
 ifneq (,$(filter mc1322x,$(USEMODULE)))
 	INCLUDES += -I$(RIOTBASE)/sys/net/include
 endif
