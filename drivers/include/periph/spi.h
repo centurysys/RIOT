@@ -96,7 +96,8 @@ typedef enum {
     SPI_SPEED_400KHZ,           /**< drive the SPI bus with 400KHz */
     SPI_SPEED_1MHZ,             /**< drive the SPI bus with 1MHz */
     SPI_SPEED_5MHZ,             /**< drive the SPI bus with 5MHz */
-    SPI_SPEED_10MHZ             /**< drive the SPI bus with 10MHz */
+    SPI_SPEED_10MHZ,            /**< drive the SPI bus with 10MHz */
+    SPI_SPEED_15MHZ             /**< drive the SPI bus with 10MHz */
 } spi_speed_t;
 
 /**

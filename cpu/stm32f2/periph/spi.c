@@ -99,6 +99,9 @@ int spi_init_master(spi_t dev, spi_conf_t conf, spi_speed_t speed)
         case SPI_SPEED_10MHZ:
             speed_devider = 0x01 + spi_bus_div_map[dev];  /* makes 10.5 MHz */
             break;
+        case SPI_SPEED_15MHZ:
+            speed_devider = 0x00 + spi_bus_div_map[dev];  /* makes 15 MHz */
+            break;
         default:
             return -1;
     }
