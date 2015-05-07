@@ -85,11 +85,11 @@ netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev)
         page = 1;
     }
 
-    printf(" clear interrupt with 0x%08x\n", status);
+    printf(" clear interrupt with 0x%08x\n", (unsigned int) status);
     ml7396_clear_interrupts(status);
 
     status = ml7396_get_interrupt_status();
-    printf(" --> interrupt status: 0x%08x\n", status);
+    printf(" --> interrupt status: 0x%08x\n", (unsigned int) status);
 
 #if 0
     reg = (page == 0) ? (PD_DATA_REQ0 | PD_DATA_CFM0) : (PD_DATA_REQ1 | PD_DATA_CFM1);

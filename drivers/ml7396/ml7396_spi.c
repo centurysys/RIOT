@@ -138,7 +138,6 @@ void ml7396_reg_reads(uint16_t reg, uint8_t *buf, int len)
 /* fifo */
 void ml7396_fifo_read(uint8_t *data, radio_packet_length_t length)
 {
-    int i;
     uint8_t bank, addr;
     unsigned irqstate;
 
@@ -155,7 +154,6 @@ void ml7396_fifo_read(uint8_t *data, radio_packet_length_t length)
 
 void ml7396_fifo_write(const uint8_t *data, radio_packet_length_t length)
 {
-    int i;
     uint8_t bank, addr;
     unsigned irqstate;
 
@@ -209,7 +207,7 @@ void ml7396_clear_interrupts(uint32_t interrupts)
     status = ~interrupts;
 
     printf("%s interrupts = 0x%08x, status = 0x%08x\n",
-           __FUNCTION__, interrupts, status);
+           __FUNCTION__, (unsigned int) interrupts, (unsigned int) status);
 
     for (i = 0; i < 4; i++) {
         buf[i] = (uint8_t) ((status >> (8 * i)) & 0xff);
@@ -228,7 +226,7 @@ void ml7396_set_interrupt_enable(uint32_t interrupts)
 
     status = ml7396_get_interrupt_enable();
     printf("** %s: status before enable: 0x%08x, interrupts: 0x%08x\n",
-           __FUNCTION__, status, interrupts);
+           __FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status |= interrupts;
 
@@ -249,7 +247,7 @@ void ml7396_set_interrupt_mask(uint32_t interrupts)
 
     status = ml7396_get_interrupt_enable();
     printf("** %s: status before mask: 0x%08x, interrupts: 0x%08x\n",
-           __FUNCTION__, status, interrupts);
+           __FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status &= ~interrupts;
 

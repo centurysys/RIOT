@@ -6,6 +6,8 @@
 #include "transceiver.h"
 #include "msg.h"
 
+#include "ieee802154_frame.h"
+
 ml7396_packet_t ml7396_rx_buffer[ML7396_RX_BUF_SIZE];
 static uint8_t buffer[ML7396_RX_BUF_SIZE][ML7396_MAX_PKT_LENGTH];
 volatile uint8_t rx_buffer_next;
@@ -23,7 +25,7 @@ static inline void _ml7396_clear_rx_interrupts(int page)
         interrupts |= (INT_RXFIFO1_DONE | INT_RXFIFO1_CRCERR);
     }
 
-    printf("*** clear with: 0x%08x\n", interrupts);
+    printf("*** clear with: 0x%08x\n", (unsigned int) interrupts);
     ml7396_clear_interrupts(interrupts);
     ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0x00);
 }
@@ -33,7 +35,7 @@ void ml7396_rx_handler(uint32_t status)
     int i, phr_len, page, crc;
     uint8_t tmp[2], *buf;
 
-    printf("== rx_handler: status = 0x%08x\n", status);
+    printf("== rx_handler: status = 0x%08x\n", (unsigned int) status);
 
     /* detect FIFO page */
     if (status & (INT_RXFIFO0_DONE | INT_RXFIFO0_CRCERR)) {

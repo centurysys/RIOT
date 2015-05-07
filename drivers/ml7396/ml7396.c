@@ -148,9 +148,13 @@ void ml7396_init(kernel_pid_t tpid)
 
 static void ml7396_spi_init(void)
 {
+    int res;
+
     spi_acquire(ML7396_SPI);
-    spi_init_master(ML7396_SPI, SPI_CONF_FIRST_RISING, SPI_SPEED);
+    res = spi_init_master(ML7396_SPI, SPI_CONF_FIRST_RISING, SPI_SPEED);
     spi_release(ML7396_SPI);
+
+    printf("%s: spi_init_master -> %d\n", __FUNCTION__, res);
 
     gpio_init_out(ML7396_CS, GPIO_PULLUP);
     gpio_init_out(ML7396_RESET, GPIO_PULLUP);
