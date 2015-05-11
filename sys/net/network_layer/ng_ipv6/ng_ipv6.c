@@ -56,7 +56,7 @@ static void *_event_loop(void *args);
 kernel_pid_t ng_ipv6_init(void)
 {
     if (_pid == KERNEL_PID_UNDEF) {
-        _pid = thread_create(_stack, NG_IPV6_STACK_SIZE, NG_IPV6_PRIO,
+        _pid = thread_create(_stack, sizeof(_stack), NG_IPV6_PRIO,
                              CREATE_STACKTEST, _event_loop, NULL, "ipv6");
     }
 
@@ -285,7 +285,7 @@ static int _fill_ipv6_hdr(kernel_pid_t iface, ng_pktsnip_t *ipv6,
 static inline void _send_multicast_over_iface(kernel_pid_t iface, ng_pktsnip_t *pkt,
                                               ng_pktsnip_t *netif)
 {
-    DEBUG("ipv6: send multicast over interface %" PRIkernel_pid "\n", ifs[i]);
+    DEBUG("ipv6: send multicast over interface %" PRIkernel_pid "\n", iface);
     /* mark as multicast */
     ((ng_netif_hdr_t *)netif->data)->flags |= NG_NETIF_HDR_FLAGS_MULTICAST;
     /* and send to interface */
@@ -297,13 +297,12 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
                             bool prep_hdr)
 {
     ng_pktsnip_t *netif;
+    kernel_pid_t *ifs;
+    size_t ifnum;
 
-#if NG_NETIF_NUMOF > 1
-    /* netif header not present: send over all interfaces */
     if (iface == KERNEL_PID_UNDEF) {
-        size_t ifnum;
         /* get list of interfaces */
-        kernel_pid_t *ifs = ng_netif_get(&ifnum);
+        ifs = ng_netif_get(&ifnum);
 
         /* throw away packet if no one is interested */
         if (ifnum == 0) {
@@ -311,7 +310,12 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
             ng_pktbuf_release(pkt);
             return;
         }
+    }
 
+
+#if NG_NETIF_NUMOF > 1
+    /* netif header not present: send over all interfaces */
+    if (iface == KERNEL_PID_UNDEF) {
         /* send packet to link layer */
         ng_pktbuf_hold(pkt, ifnum - 1);
 
@@ -366,6 +370,8 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
     }
 #else   /* NG_NETIF_NUMOF */
     if (iface == KERNEL_PID_UNDEF) {
+        iface = ifs[0];
+
         /* allocate interface header */
         netif = ng_netif_hdr_build(NULL, 0, NULL, 0);
 
