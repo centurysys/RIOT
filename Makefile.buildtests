@@ -31,6 +31,9 @@ endif
         info-buildsizes-diff info-build info-boards-supported \
         info-features-missing info-boards-features-missing
 
+ifeq ($(BUILD_IN_DOCKER),1)
+buildtest: ..in-docker-container
+else
 buildtest:
 	@ \
 	BUILDTESTOK=true; \
@@ -66,6 +69,7 @@ buildtest:
 		done; \
 	done; \
 	$${BUILDTESTOK}
+endif # BUILD_IN_DOCKER
 
 info-objsize:
 	@case "${SORTROW}" in \
@@ -163,6 +167,9 @@ info-build:
 	@echo '         $(or $(sort $(filter-out $(FEATURES_PROVIDED), $(FEATURES_REQUIRED))), -none-)'
 	@echo 'FEATURES_MISSING (only non-optional features):'
 	@echo '         $(or $(sort $(filter-out $(FEATURES_OPTIONAL) $(FEATURES_PROVIDED), $(FEATURES_REQUIRED))), -none-)'
+	@echo ''
+	@echo 'FEATURES_CONFLICT:     $(FEATURES_CONFLICT)'
+	@echo 'FEATURES_CONFLICT_MSG: $(FEATURES_CONFLICT_MSG)'
 	@echo ''
 	@echo 'CC:      $(CC)'
 	@echo -e 'CFLAGS:$(patsubst %, \n\t%, $(CFLAGS))'
