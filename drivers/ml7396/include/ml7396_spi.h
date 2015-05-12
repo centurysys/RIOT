@@ -28,6 +28,12 @@
 extern "C" {
 #endif
 
+#ifdef DEBUG
+#define dprintf(fmt, arg...) do {printf(fmt, ##arg);} while (0)
+#else
+#define dprintf(fmt, arg...) do {} while (0)
+#endif
+
 void ml7396_reg_write(uint16_t addr, uint8_t value);
 uint8_t ml7396_reg_read(uint16_t addr);
 

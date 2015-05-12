@@ -52,14 +52,10 @@ int cmd_ml7396_get_interrupt_status(int argc, char **argv)
     return 0;
 }
 
-
-extern int ml7396_initialize(netdev_t *dev);
 extern void ml7396_reset(void);
 
 int cmd_ml7396_reset(int argc, char **argv)
 {
-    ml7396_initialize(NULL);
-
     ml7396_reset();
 
     return 0;

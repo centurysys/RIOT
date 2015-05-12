@@ -49,7 +49,11 @@ static void ml7396_spi_writes(uint8_t addr, const uint8_t *data, int len)
 {
     gpio_clear(ML7396_CS);
 
+    delay(1000);
+
     spi_transfer_regs(ML7396_SPI, REG_WR | ADDR(addr), (char *) data, 0, len);
+
+    delay(1000);
 
     gpio_set(ML7396_CS);
 }
@@ -206,8 +210,8 @@ void ml7396_clear_interrupts(uint32_t interrupts)
 
     status = ~interrupts;
 
-    printf("%s interrupts = 0x%08x, status = 0x%08x\n",
-           __FUNCTION__, (unsigned int) interrupts, (unsigned int) status);
+    //dprintf("%s interrupts = 0x%08x, status = 0x%08x\n",
+    //__FUNCTION__, (unsigned int) interrupts, (unsigned int) status);
 
     for (i = 0; i < 4; i++) {
         buf[i] = (uint8_t) ((status >> (8 * i)) & 0xff);
@@ -225,8 +229,8 @@ void ml7396_set_interrupt_enable(uint32_t interrupts)
     int i;
 
     status = ml7396_get_interrupt_enable();
-    printf("** %s: status before enable: 0x%08x, interrupts: 0x%08x\n",
-           __FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
+    //dprintf("** %s: status before enable: 0x%08x, interrupts: 0x%08x\n",
+    //__FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status |= interrupts;
 
@@ -246,8 +250,8 @@ void ml7396_set_interrupt_mask(uint32_t interrupts)
     int i;
 
     status = ml7396_get_interrupt_enable();
-    printf("** %s: status before mask: 0x%08x, interrupts: 0x%08x\n",
-           __FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
+    //dprintf("** %s: status before mask: 0x%08x, interrupts: 0x%08x\n",
+    //__FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status &= ~interrupts;
 

@@ -34,6 +34,8 @@
 #include "mutex.h"
 #include "config.h"
 
+//#define DEBUG
+
 #define INT_WAIT 4
 
 static mutex_t ml7396_mutex = MUTEX_INIT;
@@ -43,6 +45,9 @@ static uint16_t radio_pan;
 static uint8_t  radio_channel;
 static uint16_t radio_address;
 static uint64_t radio_address_long;
+
+netdev_802154_raw_packet_cb_t ml7396_raw_packet_cb;
+netdev_rcv_data_cb_t ml7396_data_packet_cb;
 
 /* default source address length for sending in number of byte */
 static size_t _default_src_addr_len = 8;
@@ -154,7 +159,7 @@ static void ml7396_spi_init(void)
     res = spi_init_master(ML7396_SPI, SPI_CONF_FIRST_RISING, SPI_SPEED);
     spi_release(ML7396_SPI);
 
-    printf("%s: spi_init_master -> %d\n", __FUNCTION__, res);
+    //dprintf("%s: spi_init_master -> %d\n", __FUNCTION__, res);
 
     gpio_init_out(ML7396_CS, GPIO_PULLUP);
     gpio_init_out(ML7396_RESET, GPIO_PULLUP);
@@ -187,7 +192,7 @@ static void ml7396_clk_init(void)
 
     ml7396_wait_interrupt(INT_CLK_STABLE, 1, &ml7396_mutex);
 
-    printf("stat: 0x%08x\n", (unsigned int) ml7396_get_interrupt_status());
+    //dprintf("stat: 0x%08x\n", (unsigned int) ml7396_get_interrupt_status());
 
     //ml7396_set_interrupt_mask(ML7396_INT_ALL);
 }
@@ -370,7 +375,7 @@ static void ml7396_rf_init(void)
     //mutex_lock(&ml7396_mutex);
     ml7396_wait_interrupt(INT_VCO_DONE, 1, &ml7396_mutex);
 
-    printf("VCO calibration done.\n");
+    //printf("VCO calibration done.\n");
     ml7396_set_interrupt_mask(INT_VCO_DONE);
 }
 
@@ -408,10 +413,10 @@ static void ml7396_irq(void)
     pd_req = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
     pd_ind = ml7396_reg_read(ML7396_REG_INT_PD_DATA_IND);
 
-    printf("%s: enable = 0x%08x, status = 0x%08x\n"
-           "  PD_DATA_REQ = 0x%02x, PD_DATA_IND = 0x%02x\n",
-           __FUNCTION__, (unsigned int) enable, (unsigned int) status,
-           (unsigned int) pd_req, (unsigned int) pd_ind);
+    /*dprintf("%s: enable = 0x%08x, status = 0x%08x\n"
+            "  PD_DATA_REQ = 0x%02x, PD_DATA_IND = 0x%02x\n",
+            __FUNCTION__, (unsigned int) enable, (unsigned int) status,
+            (unsigned int) pd_req, (unsigned int) pd_ind);*/
 
     /* FIFO 0/1 RX Done interrupt */
     if (status & (INT_RXFIFO0_DONE | INT_RXFIFO1_DONE)) {
@@ -424,8 +429,8 @@ static void ml7396_irq(void)
 
     /* wakeup thread */
     res = ml7396_wakeup_interrupt(status);
-    if (res > 0)
-        printf("%s: wakeup %d\n", __FUNCTION__, res);
+//    if (res > 0)
+//        dprintf("%s: wakeup %d\n", __FUNCTION__, res);
 
     if (status & enable) {
         //ml7396_clear_interrupts(status & enable);
@@ -435,6 +440,42 @@ static void ml7396_irq(void)
     /* re-enable interrupt */
     ml7396_set_interrupt_mask(ML7396_INT_ALL);
     ml7396_set_interrupt_enable(enable);
+}
+
+int ml7396_add_raw_recv_callback(netdev_t *dev,
+                                 netdev_802154_raw_packet_cb_t recv_cb)
+{
+    if (ml7396_raw_packet_cb == NULL){
+        ml7396_raw_packet_cb = recv_cb;
+        return 0;
+    }
+
+    return -ENOBUFS;
+}
+
+int ml7396_rem_raw_recv_callback(netdev_t *dev,
+                                 netdev_802154_raw_packet_cb_t recv_cb)
+{
+    ml7396_raw_packet_cb = NULL;
+    return 0;
+}
+
+int ml7396_add_data_recv_callback(netdev_t *dev,
+                                  netdev_rcv_data_cb_t recv_cb)
+{
+    if (ml7396_data_packet_cb == NULL){
+        ml7396_data_packet_cb = recv_cb;
+        return 0;
+    }
+
+    return -ENOBUFS;
+}
+
+int ml7396_rem_data_recv_callback(netdev_t *dev,
+                                  netdev_rcv_data_cb_t recv_cb)
+{
+    ml7396_data_packet_cb = NULL;
+    return 0;
 }
 
 int ml7396_channel_is_clear(netdev_t *dev)
@@ -455,7 +496,7 @@ int ml7396_channel_is_clear(netdev_t *dev)
     ml7396_set_interrupt_mask(INT_CCA_COMPLETE);
 
     status = ml7396_reg_read(ML7396_REG_CCA_CNTRL);
-    printf("%s: CCA_STATUS = 0x%02x\n", __FUNCTION__, status);
+    //dprintf("%s: CCA_STATUS = 0x%02x\n", __FUNCTION__, status);
 
     if (CCA_RSLT(status) == CCA_RSLT_IDLE) {
         result = 0;
@@ -464,7 +505,7 @@ int ml7396_channel_is_clear(netdev_t *dev)
         result = -1;
     }
 
-    ml7396_switch_to_trx_off();
+    //ml7396_switch_to_trx_off();
 
     return result;
 }
@@ -718,26 +759,55 @@ int ml7396_set_state(netdev_t *dev, netdev_state_t state)
     return 0;
 }
 
+static void _ml7396_wait_rf_stat(uint8_t stat, char *func)
+{
+    volatile uint8_t reg;
+
+    while (1) {
+        reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+        /*printf("# %s: RF_STATUS = 0x%02x, (wait: 0x%02x) (%s)\n",
+          __FUNCTION__, reg, stat, func);*/
+
+        if ((reg & 0xf0) == stat) {
+            break;
+        }
+#if 0
+        else {
+            ml7396_set_interrupt_enable(INT_RFSTAT_CHANGE);
+            ml7396_wait_interrupt(INT_RFSTAT_CHANGE, 0, &ml7396_mutex);
+        }
+#endif
+    }
+
+    //printf("%s: done. (%s)\n", __FUNCTION__, func);
+}
+
 void ml7396_switch_to_rx(void)
 {
     ml7396_reg_write(ML7396_REG_RF_STATUS, SET_RX_ON);
+
+    //_ml7396_wait_rf_stat(STAT_RX_ON, __FUNCTION__);
 }
 
 void ml7396_switch_to_tx(void)
 {
     ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TX_ON);
+
+    //_ml7396_wait_rf_stat(STAT_TX_ON, __FUNCTION__);
 }
 
 void ml7396_switch_to_trx_off(void)
 {
     ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TRX_OFF);
+
+    _ml7396_wait_rf_stat(STAT_TRX_OFF, __FUNCTION__);
 }
 
 const netdev_802154_driver_t ml7396_driver = {
     .init = ml7396_initialize,
 //  .send_data = netdev_802154_send_data,
-//  .add_receive_data_callback = ml7396_add_data_recv_callback,
-//  .rem_receive_data_callback = ml7396_rem_data_recv_callback,
+    .add_receive_data_callback = ml7396_add_data_recv_callback,
+    .rem_receive_data_callback = ml7396_rem_data_recv_callback,
     .get_option = ml7396_get_option,
     .set_option = ml7396_set_option,
     .get_state = ml7396_get_state,
@@ -746,8 +816,8 @@ const netdev_802154_driver_t ml7396_driver = {
 //  .load_tx = ml7396_load_tx_buf,
 //  .transmit = ml7396_transmit_tx_buf,
 //  .send = netdev_802154_send,
-//  .add_receive_raw_callback = ml7396_add_raw_recv_callback,
-//  .rem_receive_raw_callback = ml7396_rem_raw_recv_callback,
+    .add_receive_raw_callback = ml7396_add_raw_recv_callback,
+    .rem_receive_raw_callback = ml7396_rem_raw_recv_callback,
     .channel_is_clear = ml7396_channel_is_clear,
 };
 

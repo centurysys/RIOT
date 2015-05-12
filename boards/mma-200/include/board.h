@@ -60,6 +60,15 @@ extern "C" {
 /** @} */
 
 /**
+ * @name Define UART device and baudrate for host I/F
+ * @{
+ */
+#define HOSTIF              UART_1
+#define HOSTIF_BAUDRATE     (115200U)
+#define HOSTIF_RX_BUFSIZE   (64U)
+/** @} */
+
+/**
  * @name LED pin definitions
  * @{
  */
