@@ -96,6 +96,7 @@ extern "C" {
 #define ML7396_REG_ACK_FRAME2			(BANK(0) | REG(0x54))
 #define ML7396_REG_AUTO_ACK_SET		(BANK(0) | REG(0x55))
 #define ML7396_REG_PLL_MONO_DIO_SEL	(BANK(0) | REG(0x69))
+#define ML7396_REG_FAST_TX_SET			(BANK(0) | REG(0x6a))
 #define ML7396_REG_CH_SET				(BANK(0) | REG(0x6b))
 #define ML7396_REG_RF_STATUS			(BANK(0) | REG(0x6c))
 #define ML7396_REG_2DIV_GAIN_CNTRL		(BANK(0) | REG(0x6e))

@@ -9,6 +9,7 @@
 
 static int16_t ml7396_load(ml7396_packet_t *packet);
 static int16_t ml7396_load_raw(char *buf, int len);
+static int16_t ml7396_load_raw2(char *buf, int len);
 static void ml7396_gen_pkt(uint8_t *buf, ml7396_packet_t *packet);
 
 static uint8_t sequence_nr;
@@ -80,6 +81,67 @@ int16_t ml7396_send_raw(char *buf, int len)
 #endif
 
     ml7396_transmit_tx_buf(&ml7396_netdev);
+
+    return result;
+}
+
+int16_t ml7396_send_raw2(char *buf, int len)
+{
+    int page;
+    int16_t result;
+    int retry, status;
+    uint32_t intstat;
+
+#if 1
+    /* CCA */
+    for (retry = 0; retry < 3; retry++) {
+        status = ml7396_channel_is_clear(&ml7396_netdev);
+
+        if (status == 0) {
+            break;
+        }
+        else {
+            usleep(1 * 1000);
+        }
+    }
+
+    if (status != 0) {
+        return -1;
+    }
+#endif
+
+    //ml7396_reg_write(ML7396_REG_FAST_TX_SET, 0x08);
+    ml7396_switch_to_tx();
+
+    result = ml7396_load_raw2(buf, len);
+    if (result < 0) {
+        return result;
+    }
+
+    while (1) {
+        status = ml7396_get_interrupt_status();
+        //ml7396_wait_interrupt(INT_TXFIFO0_DONE | INT_TXFIFO1_DONE, 0, &tx_mutex);
+
+        if (status & (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE))
+            break;
+    }
+
+    printf("**** %s: wakeup! \n", __FUNCTION__);
+
+    intstat = ml7396_get_interrupt_status();
+    intstat &= (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE |
+                INT_TXFIFO0_REQ | INT_TXFIFO1_REQ |
+                INT_RFSTAT_CHANGE);
+
+    if (intstat & INT_TXFIFO0_DONE) {
+        page = 0;
+    }
+    else {
+        page = 1;
+    }
+
+    //dprintf(" clear interrupt with 0x%08x\n", (unsigned int) status);
+    ml7396_clear_interrupts(intstat);
 
     return result;
 }
@@ -261,11 +323,11 @@ static int16_t ml7396_load_raw(char *buf, int len)
     memset(pkt, 0, 256);
 
     pkt[0] = 0x10;
-    pkt[1] = len + 2;
+    pkt[1] = len;
 
     memcpy(&pkt[2], buf, len);
 
-    ml7396_fifo_write((uint8_t *) pkt, len + 2 + 2);
+    ml7396_fifo_write((uint8_t *) pkt, len + 2);
 
     reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
     //dprintf("FIFO_BANK: 0x%02x\n", reg);
@@ -295,6 +357,24 @@ static int16_t ml7396_load_raw(char *buf, int len)
         printf("%s: TX-FIFO timeouted...\n", __FUNCTION__);
         return -1;
     }
+
+    return len + 2;
+}
+
+static int16_t ml7396_load_raw2(char *buf, int len)
+{
+    int i, done;
+    uint32_t status;
+    uint8_t reg;
+
+    memset(pkt, 0, 256);
+
+    pkt[0] = 0x10;
+    pkt[1] = len + 2;
+
+    memcpy(&pkt[2], buf, len);
+
+    ml7396_fifo_write((uint8_t *) pkt, len + 2 + 2);
 
     return len + 2;
 }

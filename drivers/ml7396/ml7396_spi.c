@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "vtimer.h"
 
 #include "ml7396_spi.h"
 #include "ml7396_settings.h"
@@ -56,6 +57,36 @@ static void ml7396_spi_writes(uint8_t addr, const uint8_t *data, int len)
     delay(1000);
 
     gpio_set(ML7396_CS);
+}
+
+static void ml7396_spi_writes2(uint8_t addr, const uint8_t *data, int len)
+{
+    timex_t start, end;
+    int32_t elapsed_us, wait;
+
+    gpio_clear(ML7396_CS);
+
+    vtimer_now(&start);
+
+    spi_transfer_regs(ML7396_SPI, REG_WR | ADDR(addr), (char *) data, 0, len);
+
+    vtimer_now(&end);
+
+    elapsed_us = ((end.seconds - start.seconds) * 1000 * 1000 +
+                  (end.microseconds - start.microseconds));
+
+    if (elapsed_us < 200) {
+        wait = 200 - elapsed_us;
+
+        if (wait > 0) {
+            //delay(wait * 1000);
+        }
+
+        gpio_set(ML7396_CS);
+
+        if (wait > 0)
+            printf("%s: wait %d [us]\n", __FUNCTION__, wait);
+    }
 }
 
 static void ml7396_spi_reads(uint8_t addr, uint8_t *data, int len)

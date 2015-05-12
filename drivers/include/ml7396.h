@@ -370,6 +370,7 @@ netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev);
  */
 int16_t ml7396_send(ml7396_packet_t *packet);
 int16_t ml7396_send_raw(char *buf, int len);
+int16_t ml7396_send_raw2(char *buf, int len);
 
 /**
  * RX Packet Buffer, read from the transceiver, filled by the ml7396_rx_handler.

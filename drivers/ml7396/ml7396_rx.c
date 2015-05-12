@@ -7,6 +7,7 @@
 
 #include "ml7396.h"
 #include "ml7396_spi.h"
+#include "crc.h"
 
 ml7396_packet_t ml7396_rx_buffer[ML7396_RX_BUF_SIZE];
 static uint8_t buffer[ML7396_RX_BUF_SIZE][ML7396_MAX_PKT_LENGTH];
@@ -32,8 +33,9 @@ static inline void _ml7396_clear_rx_interrupts(int page)
 
 void ml7396_rx_handler(uint32_t status)
 {
-    int i, phr_len, page, crc;
+    int i, phr_len, page, crc_ok;
     uint8_t tmp[2], *buf, lqi, fcs_rssi;
+    uint16_t crc;
 
     //printf("== rx_handler: status = 0x%08x\n", (unsigned int) status);
 
@@ -48,14 +50,14 @@ void ml7396_rx_handler(uint32_t status)
         return;
     }
 
+#if 0
     if (status & (INT_RXFIFO0_CRCERR | INT_RXFIFO1_CRCERR)) {
         crc = 0;
     }
     else {
         crc = 1;
     }
-
-    printf(" page: %d, crc: %s\n", page, (crc == 1) ? "OK" : "NG");
+#endif
 
     /* read PHR (2-octets) */
     ml7396_fifo_read(tmp, 2);
@@ -82,7 +84,20 @@ void ml7396_rx_handler(uint32_t status)
     printf("ED: %02x\n", buf[phr_len + 2 + 1]);
 #endif
 
-    if (crc == 0) {
+    crc = crc_ccitt(0, buf, phr_len);
+
+    if (*((uint16_t *) (buf + phr_len)) == crc) {
+        crc_ok = 1;
+    }
+    else {
+        printf("! CRC(received) %02x %02x, calc: %04x\n", buf[phr_len], buf[phr_len+1],
+               crc);
+        crc_ok = 0;
+    }
+
+    //printf(" page: %d, crc: %s\n", page, (crc_ok == 1) ? "OK" : "NG");
+
+    if (crc_ok == 0) {
         goto ret;
     }
 
@@ -102,6 +117,7 @@ void ml7396_rx_handler(uint32_t status)
                                  ml7396_rx_buffer[rx_buffer_next].length,
                                  fcs_rssi, lqi, (fcs_rssi >> 7));
         }
+#if 0
 #ifdef MODULE_TRANSCEIVER
         /* notify transceiver thread if any */
         if (transceiver_pid != KERNEL_PID_UNDEF) {
@@ -110,6 +126,7 @@ void ml7396_rx_handler(uint32_t status)
             m.content.value = rx_buffer_next;
             msg_send_int(&m, transceiver_pid);
         }
+#endif
 #endif
     }
     else {

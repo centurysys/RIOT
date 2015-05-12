@@ -272,7 +272,7 @@ static void send_uart2(uart1_dev_t *dev, char code, char *buf, int buflen)
 #endif
 
     vtimer_now(&now);
-    printf("%s[%lu.%06lu]:\n", __FUNCTION__, now.seconds, now.microseconds);
+    //printf("%s[%lu.%06lu]:\n", __FUNCTION__, now.seconds, now.microseconds);
 
     uart_tx_begin(HOSTIF);
     //printf("tx_begin\n");
@@ -569,7 +569,7 @@ static void rf_receive_raw_cb(netdev_t *dev, void *buf, size_t len,
 
     msg_send(&msg, uart1_tx_handler_pid);
 
-    printf("%s: called, len = %d\n", __FUNCTION__, len);
+    //printf("%s: called, len = %d\n", __FUNCTION__, len);
 }
 
 
@@ -626,8 +626,8 @@ static int _transmit(uart1_dev_t *dev)
     memcpy(transmit_buf, dev->data, dev->data_len);
     transmit_len = dev->data_len;
 
-    //res = ml7396_send_raw(dev->data, dev->data_len);
-    res = ml7396_send_raw(transmit_buf, transmit_len);
+    res = ml7396_send_raw(dev->data, dev->data_len);
+    //res = ml7396_send_raw2(transmit_buf, transmit_len);
 
     vtimer_now(&end);
 
@@ -651,8 +651,8 @@ static int _transmit(uart1_dev_t *dev)
     }
 
     //mutex_unlock(&dev->cmd_mutex);
-    printf("%s[%lu.%06lu]: ---> sent, %lu.%06lu\n", __FUNCTION__,
-           end.seconds, end.microseconds, diff.seconds, diff.microseconds);
+    //printf("%s[%lu.%06lu]: ---> sent, %lu.%06lu\n", __FUNCTION__,
+    //end.seconds, end.microseconds, diff.seconds, diff.microseconds);
 
     msg_t msg;
     msgbuf_t *msgbuf;

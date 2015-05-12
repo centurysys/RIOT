@@ -235,6 +235,7 @@ static struct ml7396_setting rf_settings[] = {
     { ML7396_REG_RX_PR_LEN, 0x12 },
     { ML7396_REG_SYNC_CONDITION, 0x00 },
     { ML7396_REG_DATA_SET, 0x11 },
+    { ML7396_REG_FEC_CRC_SET, 0x0a }, /* Disable CRC */
     /* CH#0 Freq */
     { ML7396_REG_CH0_FL, 0x00 },
     { ML7396_REG_CH0_FM, 0x00 },
@@ -250,7 +251,7 @@ static struct ml7396_setting rf_settings[] = {
 
     { ML7396_REG_F_DEV_L, 0xb0 },
     { ML7396_REG_F_DEV_H, 0x05 },
-    { ML7396_REG_ACK_TIMER_EN, 0x00 },
+    { ML7396_REG_ACK_TIMER_EN, 0x20 },
     { ML7396_REG_PLL_MONO_DIO_SEL, 0x00 },
     { ML7396_REG_2DIV_GAIN_CNTRL, 0x02 },
     { ML7396_REG_2DIV_SEARCH, 0x16 },
