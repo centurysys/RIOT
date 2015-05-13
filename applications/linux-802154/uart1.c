@@ -59,6 +59,7 @@ enum status_code {
 };
 
 enum error_code {
+    ERR_NONE             = 0x00,
     ERR_BUSY_RX          = 0x01,
     ERR_BUSY_TX          = 0x02,
     ERR_BUSY_UNSPEC      = 0x03,
@@ -207,24 +208,6 @@ void uart1_thread_init(void)
 /*
  *
  */
-static int _tx_cb(void *arg)
-{
-    uart1_dev_t *dev = (uart1_dev_t *) arg;
-
-    if (dev->send_idx >= dev->send_len) {
-        mutex_unlock(&dev->tx_mutex);
-
-        return 0;
-    }
-
-    uart_write(HOSTIF, dev->send_buf[dev->send_idx++]);
-
-    return 1;
-}
-
-/*
- *
- */
 static void send_uart(uart1_dev_t *dev, char code, char *buf, int buflen)
 {
     //printf("* %s (len: %d)\n", __FUNCTION__, buflen);
@@ -245,10 +228,7 @@ static void send_uart(uart1_dev_t *dev, char code, char *buf, int buflen)
 
 static void send_uart2(uart1_dev_t *dev, char code, char *buf, int buflen)
 {
-    int i;
     timex_t now;
-
-    //printf("* %s (len: %d)\n", __FUNCTION__, buflen);
 
     mutex_lock(&dev->tx_mutex);
 
@@ -263,6 +243,8 @@ static void send_uart2(uart1_dev_t *dev, char code, char *buf, int buflen)
 
 #if 0
     printf("%s: received_data\n", __FUNCTION__);
+    int i;
+
     for (i = 0; i < buflen; i++) {
         printf(" %02x", buf[i]);
         if ((i % 16) == 15)
@@ -315,7 +297,7 @@ static void _get_msgbuf(msgbuf_t **msgbuf, char **buf)
 }
 
 /*
- *
+ *  command handler: CMD_NOOP (0x00)
  */
 static void _cmd_noop(uart1_dev_t *dev)
 {
@@ -340,7 +322,7 @@ static void _cmd_noop(uart1_dev_t *dev)
 }
 
 /*
- *
+ *  command handler: CMD_OPEN (0x01)
  */
 static void _cmd_open(uart1_dev_t *dev)
 {
@@ -365,7 +347,7 @@ static void _cmd_open(uart1_dev_t *dev)
 }
 
 /*
- *
+ *  command handler: CMD_CLOSE (0x02)
  */
 static void _cmd_close(uart1_dev_t *dev)
 {
@@ -390,39 +372,198 @@ static void _cmd_close(uart1_dev_t *dev)
 }
 
 /*
- *
+ *  command handler: CMD_SET_CHANNEL (0x03)
  */
-static void _cmd_transmit_blk(uart1_dev_t *dev)
+static void _cmd_set_channel(uart1_dev_t *dev)
 {
+    uint8_t page, ch_no;
+    unsigned int channel;
     msg_t msg;
     msgbuf_t *msgbuf;
-    char *buf;
+    char *buf, err, status;
 
-    /* send to Radio */
-    msg.type = MSG_UART_RECEIVED;
-    msg_send_int(&msg, uart1_rx_handler_pid);
+    page = (uint8_t) dev->params[0];
+    ch_no = (uint8_t) dev->params[1];
 
-    //printf("%s: wait for sent...\n", __FUNCTION__);
-    //mutex_lock(&dev->cmd_mutex);
-    //printf("%s: ---> sent.\n", __FUNCTION__);
+    status = STATUS_FAILURE;
+    err = ERR_NONE;
 
-#if 0
-    /* response to host */
+    if (page != 9) {
+        err = ERR_UNSUPPORTED_PAGE;
+    }
+    else if (ch_no < 4 || ch_no > 17) {
+        err = ERR_UNSUPPORTED_CHAN;
+    }
+    else {
+        int res;
+
+        status = STATUS_SUCCESS;
+
+        channel = 33 + (ch_no - 4) * 2;
+        res = ml7396_set_channel(channel);
+
+        if (res < 0) {
+            status = STATUS_FAILURE;
+            err = ERR_UNSUPPORTED_CHAN;
+        }
+    }
+
     _get_msgbuf(&msgbuf, &buf);
 
-    buf[0] = STATUS_SUCCESS;
+    buf[0] = status;
+    buf[1] = err;
 
-    msgbuf->code = RESPONSE(CMD_TRANSMIT_BLK);
+    msgbuf->code = RESPONSE(CMD_SET_CHANNEL);
     msgbuf->buf  = buf;
-    msgbuf->len  = 1;
+    msgbuf->len  = 2;
 
     msg.type = MSG_SEND_REQ;
     msg.content.ptr = (char *) msgbuf;
 
     msg_send(&msg, uart1_tx_handler_pid);
-#endif
 }
 
+/*
+ *  command handler: CMD_TRANSMIT_BLOCK (0x05)
+ */
+static void _cmd_transmit_blk(uart1_dev_t *dev)
+{
+    msg_t msg;
+
+    /* send to Radio */
+    msg.type = MSG_UART_RECEIVED;
+    msg_send_int(&msg, uart1_rx_handler_pid);
+
+    /* response may be sent later from TX thread. */
+}
+
+/*
+ *  command handler: CMD_GET_LONG_ADDR (0x06)
+ */
+static void _cmd_get_long_addr(uart1_dev_t *dev)
+{
+    int i;
+    msg_t msg;
+    msgbuf_t *msgbuf;
+    char *buf;
+    uint64_t long_addr;
+
+    long_addr = ml7396_get_address_long();
+
+    _get_msgbuf(&msgbuf, &buf);
+
+    buf[0] = STATUS_SUCCESS;
+
+    for (i = 0; i < 8; i++) {
+        buf[1 + i] = (char) ((long_addr >> (8 * (7 - i))) & 0xff);
+    }
+
+    msgbuf->code = RESPONSE(CMD_GET_LONG_ADDR);
+    msgbuf->buf  = buf;
+    msgbuf->len  = 9;
+
+    msg.type = MSG_SEND_REQ;
+    msg.content.ptr = (char *) msgbuf;
+
+    msg_send(&msg, uart1_tx_handler_pid);
+}
+
+/*
+ *  command handler: CMD_SET_LONG_ADDR (0x08)
+ */
+static void _cmd_set_long_addr(uart1_dev_t *dev)
+{
+    int i;
+    msg_t msg;
+    msgbuf_t *msgbuf;
+    char *buf;
+    uint64_t long_addr;
+
+    long_addr = 0;
+    for (i = 0; i < 8; i++) {
+        long_addr |= ((uint64_t) dev->params[i]) << (8 * (7 - i));
+    }
+
+    ml7396_set_address_long(long_addr);
+
+    _get_msgbuf(&msgbuf, &buf);
+
+    buf[0] = STATUS_SUCCESS;
+    buf[1] = ERR_NONE;
+
+    msgbuf->code = RESPONSE(CMD_SET_LONG_ADDR);
+    msgbuf->buf  = buf;
+    msgbuf->len  = 2;
+
+    msg.type = MSG_SEND_REQ;
+    msg.content.ptr = (char *) msgbuf;
+
+    msg_send(&msg, uart1_tx_handler_pid);
+}
+
+/*
+ *  command handler: CMD_SET_SHORT_ADDR (0x09)
+ */
+static void _cmd_set_short_addr(uart1_dev_t *dev)
+{
+    msg_t msg;
+    msgbuf_t *msgbuf;
+    char *buf;
+    uint16_t short_addr;
+
+    short_addr = ((((uint16_t) dev->params[0]) << 8) |
+                  ((uint16_t) dev->params[1]));
+
+    ml7396_set_address(short_addr);
+
+    _get_msgbuf(&msgbuf, &buf);
+
+    buf[0] = STATUS_SUCCESS;
+    buf[1] = ERR_NONE;
+
+    msgbuf->code = RESPONSE(CMD_SET_SHORT_ADDR);
+    msgbuf->buf  = buf;
+    msgbuf->len  = 2;
+
+    msg.type = MSG_SEND_REQ;
+    msg.content.ptr = (char *) msgbuf;
+
+    msg_send(&msg, uart1_tx_handler_pid);
+}
+
+/*
+ *  command handler: CMD_SET_PAN_ID (0x0a)
+ */
+static void _cmd_set_pan_id(uart1_dev_t *dev)
+{
+    msg_t msg;
+    msgbuf_t *msgbuf;
+    char *buf;
+    uint16_t pan_id;
+
+    pan_id = ((((uint16_t) dev->params[0]) << 8) |
+              ((uint16_t) dev->params[1]));
+
+    ml7396_set_pan(pan_id);
+
+    _get_msgbuf(&msgbuf, &buf);
+
+    buf[0] = STATUS_SUCCESS;
+    buf[1] = ERR_NONE;
+
+    msgbuf->code = RESPONSE(CMD_SET_PAN_ID);
+    msgbuf->buf  = buf;
+    msgbuf->len  = 2;
+
+    msg.type = MSG_SEND_REQ;
+    msg.content.ptr = (char *) msgbuf;
+
+    msg_send(&msg, uart1_tx_handler_pid);
+}
+
+/*
+ * serial protocol v2 command handlers
+ */
 typedef void (*cmd_handler_t)(uart1_dev_t *dev);
 
 struct cmd_handler {
@@ -434,7 +575,13 @@ static struct cmd_handler cmd_handlers[] = {
     { CMD_NOOP, _cmd_noop },
     { CMD_OPEN, _cmd_open },
     { CMD_CLOSE, _cmd_close },
+    { CMD_SET_CHANNEL, _cmd_set_channel },
     { CMD_TRANSMIT_BLK, _cmd_transmit_blk },
+    { CMD_GET_LONG_ADDR, _cmd_get_long_addr },
+    { CMD_SET_LONG_ADDR, _cmd_set_long_addr },
+    { CMD_SET_SHORT_ADDR, _cmd_set_short_addr },
+    { CMD_SET_PAN_ID, _cmd_set_pan_id },
+//  { CMD_SET_PROMISC, _cmd_set_promisc },
     { -1, NULL }
 };
 
@@ -444,8 +591,6 @@ static struct cmd_handler cmd_handlers[] = {
 static void _process_cmd(uart1_dev_t *dev)
 {
     struct cmd_handler *handler;
-
-    //printf("%s ...\n", __FUNCTION__);
 
     for (handler = &cmd_handlers[0]; handler->func; handler++) {
         if (dev->cmd == handler->cmd) {
@@ -458,7 +603,25 @@ static void _process_cmd(uart1_dev_t *dev)
 static void handle_uart1_recv(uart1_dev_t *dev, char data);
 
 /*
- *
+ *  UART driver callback (transmit)
+ */
+static int _tx_cb(void *arg)
+{
+    uart1_dev_t *dev = (uart1_dev_t *) arg;
+
+    if (dev->send_idx >= dev->send_len) {
+        mutex_unlock(&dev->tx_mutex);
+
+        return 0;
+    }
+
+    uart_write(HOSTIF, dev->send_buf[dev->send_idx++]);
+
+    return 1;
+}
+
+/*
+ *  UART driver callback (receive)
  */
 static void _rx_cb(void *arg, char data)
 {
@@ -568,11 +731,81 @@ static void rf_receive_raw_cb(netdev_t *dev, void *buf, size_t len,
     msg.content.ptr = (char *) msgbuf;
 
     msg_send(&msg, uart1_tx_handler_pid);
-
-    //printf("%s: called, len = %d\n", __FUNCTION__, len);
 }
 
 
+static char transmit_buf[256];
+static int transmit_len;
+
+static int _transmit(uart1_dev_t *dev)
+{
+    int res;
+//  timex_t start, end, diff;
+
+    //printf("%s: data_len = %d\n", __FUNCTION__, dev->data_len);
+
+//  vtimer_now(&start);
+
+    memcpy(transmit_buf, dev->data, dev->data_len);
+    transmit_len = dev->data_len;
+
+    res = ml7396_send_raw(dev->data, dev->data_len);
+
+//  vtimer_now(&end);
+
+#if 0
+    int i;
+
+    for (i = 0; i < transmit_len; i++) {
+        printf(" %02x", transmit_buf[i]);
+        if ((i % 16) == 15)
+            puts("");
+    }
+    puts("");
+#endif
+
+#if 0
+    diff.microseconds = end.microseconds - start.microseconds;
+
+    if (end.microseconds < start.microseconds) {
+        diff.microseconds = 1 * 1000 * 1000 + end.microseconds - start.microseconds;
+        diff.seconds = end.seconds - start.seconds - 1;
+    }
+    else {
+        diff.microseconds = end.microseconds - start.microseconds;
+        diff.seconds = end.seconds - start.seconds;
+    }
+
+    //mutex_unlock(&dev->cmd_mutex);
+    //printf("%s[%lu.%06lu]: ---> sent, %lu.%06lu\n", __FUNCTION__,
+    //end.seconds, end.microseconds, diff.seconds, diff.microseconds);
+#endif
+
+    msg_t msg;
+    msgbuf_t *msgbuf;
+    char *buf;
+
+    /* response to host */
+    _get_msgbuf(&msgbuf, &buf);
+
+    buf[0] = STATUS_SUCCESS;
+
+    msgbuf->code = RESPONSE(CMD_TRANSMIT_BLK);
+    msgbuf->buf  = buf;
+    msgbuf->len  = 1;
+
+    msg.type = MSG_SEND_REQ;
+    msg.content.ptr = (char *) msgbuf;
+
+    msg_send(&msg, uart1_tx_handler_pid);
+
+    return res;
+}
+
+
+/*
+ * UART1: TX thread
+ */
 static void *uart1_tx_thread(void *arg)
 {
     uart1_dev_t *dev;
@@ -610,72 +843,10 @@ static void *uart1_tx_thread(void *arg)
     return NULL;
 }
 
-static char transmit_buf[256];
-static int transmit_len;
 
-static int _transmit(uart1_dev_t *dev)
-{
-    int i;
-    int res;
-    timex_t start, end, diff;
-
-    //printf("%s: data_len = %d\n", __FUNCTION__, dev->data_len);
-
-    vtimer_now(&start);
-
-    memcpy(transmit_buf, dev->data, dev->data_len);
-    transmit_len = dev->data_len;
-
-    res = ml7396_send_raw(dev->data, dev->data_len);
-    //res = ml7396_send_raw2(transmit_buf, transmit_len);
-
-    vtimer_now(&end);
-
-#if 0
-    for (i = 0; i < transmit_len; i++) {
-        printf(" %02x", transmit_buf[i]);
-        if ((i % 16) == 15)
-            puts("");
-    }
-    puts("");
-#endif
-
-    diff.microseconds = end.microseconds - start.microseconds;
-    if (end.microseconds < start.microseconds) {
-        diff.microseconds = 1 * 1000 * 1000 + end.microseconds - start.microseconds;
-        diff.seconds = end.seconds - start.seconds - 1;
-    }
-    else {
-        diff.microseconds = end.microseconds - start.microseconds;
-        diff.seconds = end.seconds - start.seconds;
-    }
-
-    //mutex_unlock(&dev->cmd_mutex);
-    //printf("%s[%lu.%06lu]: ---> sent, %lu.%06lu\n", __FUNCTION__,
-    //end.seconds, end.microseconds, diff.seconds, diff.microseconds);
-
-    msg_t msg;
-    msgbuf_t *msgbuf;
-    char *buf;
-
-    /* response to host */
-    _get_msgbuf(&msgbuf, &buf);
-
-    buf[0] = STATUS_SUCCESS;
-
-    msgbuf->code = RESPONSE(CMD_TRANSMIT_BLK);
-    msgbuf->buf  = buf;
-    msgbuf->len  = 1;
-
-    msg.type = MSG_SEND_REQ;
-    msg.content.ptr = (char *) msgbuf;
-
-    msg_send(&msg, uart1_tx_handler_pid);
-
-    return res;
-}
-
-
+/*
+ * UART1: RX thread
+ */
 static void *uart1_rx_thread(void *arg)
 {
     uart1_dev_t *dev;
