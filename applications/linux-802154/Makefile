@@ -1,5 +1,5 @@
 # name of your application
-APPLICATION = mma200test
+APPLICATION = linux-802154
 
 # If no BOARD is found in the environment, use this default:
 BOARD ?= mma-200
@@ -36,11 +36,11 @@ USEMODULE += ps
 USEMODULE += vtimer
 USEMODULE += config
 USEMODULE += ml7396
-USEMODULE += transceiver
 USEMODULE += ieee802154
+USEMODULE += transceiver
 USEMODULE += sixlowpan
-USEMODULE += l2_ping
-USEMODULE += random
+#USEMODULE += l2_ping
+#USEMODULE += random
 
 FEATURES_OPTIONAL += config
 
