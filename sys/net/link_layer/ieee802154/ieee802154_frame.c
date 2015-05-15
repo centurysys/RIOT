@@ -183,9 +183,8 @@ uint8_t ieee802154_frame_read(uint8_t *buf, ieee802154_frame_t *frame,
 
     index++;
 
-    if(frame->fcf.dest_addr_m != 0)
-    {
-        frame->dest_pan_id = (((uint16_t)buf[index]) << 8) | buf[index + 1];
+    if(frame->fcf.dest_addr_m != 0) {
+        frame->dest_pan_id = (((uint16_t)buf[index + 1]) << 8) | buf[index];
         index += 2;
     }
 
@@ -196,9 +195,9 @@ uint8_t ieee802154_frame_read(uint8_t *buf, ieee802154_frame_t *frame,
         }
 
         case (2): {
-            /* read address in little-endian order */
-            frame->dest_addr[0] = buf[index];
-            frame->dest_addr[1] = buf[index + 1];
+            /* read address in network order */
+            frame->dest_addr[1] = buf[index];
+            frame->dest_addr[0] = buf[index + 1];
             index += 2;
             break;
         }
@@ -219,9 +218,8 @@ uint8_t ieee802154_frame_read(uint8_t *buf, ieee802154_frame_t *frame,
     }
 
     if (!(frame->fcf.panid_comp == 1)) {
-        if(frame->fcf.src_addr_m != 0)
-        {
-            frame->src_pan_id = (((uint16_t)buf[index]) << 8) | buf[index + 1];
+        if(frame->fcf.src_addr_m != 0) {
+            frame->src_pan_id = (((uint16_t)buf[index + 1]) << 8) | buf[index];
             index += 2;
         }
     }
@@ -233,9 +231,9 @@ uint8_t ieee802154_frame_read(uint8_t *buf, ieee802154_frame_t *frame,
         }
 
         case (2): {
-            /* read address in little-endian order */
-            frame->src_addr[0] = buf[index];
-            frame->src_addr[1] = buf[index + 1];
+            /* read address in network order */
+            frame->src_addr[1] = buf[index];
+            frame->src_addr[0] = buf[index + 1];
             index += 2;
             break;
         }
