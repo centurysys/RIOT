@@ -14,6 +14,8 @@ cachegrind.out*
 .cproject
 .settings
 .idea
+.kdev4
+*.kdev4
 /toolchain
 
 # GNU GLOBAL
