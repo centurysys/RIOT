@@ -2,12 +2,20 @@
 #include <unistd.h>
 #include <string.h>
 
+#include "periph/random.h"
+
 #include "mutex.h"
 #include "ieee802154_frame.h"
 
 #include "ml7396.h"
 #include "ml7396_spi.h"
 
+/* CSMA parameters */
+static const uint32_t aUnitBackoffPeriod = 1130;
+static const int macMaxCSMABackoffs = 4;
+static const int macMinBE = 8;
+static const int macMaxBE = 8;
+//static const int macMaxFrameRetries = 3;
 
 
 static int16_t ml7396_load(ml7396_packet_t *packet);
@@ -61,19 +69,31 @@ int16_t ml7396_send_raw(char *buf, int len)
 {
     int16_t result;
     int i, retry, status, wait_ack;
+    uint32_t backoff;
+    uint8_t rand;
 
     ieee802154_frame_read(buf, &ml7396_tx_packet.frame, len);
     //printf("%s: ack_req: %d\n", __FUNCTION__, ml7396_tx_packet.frame.fcf.ack_req);
 
+    if (ml7396_tx_packet.frame.fcf.ack_req == 1) {
+        /* unicast */
+        retry = 3;
+    }
+    else {
+        retry = 1;
+    }
+
     /* CCA */
-    for (retry = 0; retry < 3; retry++) {
+    for (i = 0; i < retry; i++) {
+        random_read((char *) &rand, 1);
+        backoff = aUnitBackoffPeriod * rand; /* usecs */
+
+        usleep(backoff);
+
         status = ml7396_channel_is_clear(&ml7396_netdev);
 
         if (status == 0) {
             break;
-        }
-        else {
-            usleep(10 * 1000);
         }
     }
 
@@ -254,13 +274,7 @@ netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev)
     uint8_t reg;
 
     reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
-    //dprintf("FIFO_BANK: 0x%02x\n", reg);
-
-//    ml7396_set_interrupt_enable(INT_TXFIFO0_DONE | INT_TXFIFO1_DONE);
-
     ml7396_switch_to_tx();
-
-//    mutex_lock(&tx_mutex);
 
     while (1) {
         status = ml7396_get_interrupt_status();

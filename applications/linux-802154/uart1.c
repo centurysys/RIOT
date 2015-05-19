@@ -22,6 +22,14 @@
 
 #include "uart1.h"
 
+/* CSMA parameters */
+static const uint32_t aUnitBackoffPeriod = 1130;
+static const int macMaxCSMABackoffs = 4;
+static const int macMinBE = 8;
+static const int macMaxBE = 8;
+static const int macMaxFrameRetries = 3;
+
+
 enum uart1_rx_state {
     STATE_UNDEF,
 
@@ -829,20 +837,14 @@ static int _transmit(uart1_dev_t *dev)
     ieee802154_frame_t frame;
     msg_t msg;
     timex_t timeout;
-//  timex_t start, end, diff;
-
-    //printf("%s: data_len = %d\n", __FUNCTION__, dev->data_len);
-
-//  vtimer_now(&start);
 
     memcpy(transmit_buf, dev->data, dev->data_len);
     transmit_len = dev->data_len;
 
     ieee802154_frame_read((uint8_t *) dev->data, &frame, dev->data_len);
 
-    //printf("%s: ack_req = %d\n", __FUNCTION__, frame.fcf.ack_req);
-
     if (frame.fcf.ack_req == 1) {
+        /* unicast frame */
         retry = 3;
         wait_ack = 1;
     }
@@ -865,14 +867,9 @@ static int _transmit(uart1_dev_t *dev)
                 res = 0;
                 break;
             }
-            else {
-                res = -ETIMEDOUT;
-                usleep(10 * 1000);
-            }
         }
     }
 
-//  vtimer_now(&end);
     if (res != 0) {
         printf("%s: timeouted...\n", __FUNCTION__);
     }
