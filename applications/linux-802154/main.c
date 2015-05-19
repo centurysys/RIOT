@@ -17,9 +17,9 @@
 #include "shell_commands.h"
 #include "board_uart0.h"
 
-//#include "api.h"
-//#include "radio_cmds.h"
-//#include "misc_cmds.h"
+#include "periph/random.h"
+
+#include "misc_cmds.h"
 #include "ml7396_cmds.h"
 
 #include "uart1.h"
@@ -27,21 +27,8 @@
 extern void init_mma200(void);
 
 static shell_command_t commands[] = {
-#if 0
-    { "apiRadioReset", "Reset Radio IC", cmd_api_RadioReset },
-    { "apiSetOwnPanID", "set own PanID", cmd_api_SetOwnPanID },
-    { "apiGetOwnPanID", "get own PanID", cmd_api_GetOwnPanID },
-    { "apiSetOwnAddress", "set own Address", cmd_api_SetOwnAddress },
-    { "apiGetOwnAddress", "get own Address", cmd_api_GetOwnAddress },
-    { "apiSetChannel", "set Radio Channel", cmd_api_SetChannel },
-    { "apiGetChannel", "get Radio Channel", cmd_api_GetChannel },
-    { "apiSetOutputPower", "set OutputPower", cmd_api_SetOutputPower },
-    { "apiGetOutputPower", "get OutputPower", cmd_api_GetOutputPower },
-    { "radioStat", "get MMA-200 radio-status", cmd_get_radio_status },
-    { "sendTest", "packet send test", cmd_sentPacketTest },
-    { "recvTest", "packet recv test", cmd_receive_NBTest },
     { "vtimer", "vtimer_now", cmd_vtimer_test },
-#endif
+    { "random", "random() test", cmd_random_test },
     { "ml7396_reads", "ml7396 reads", cmd_ml7396_reads },
     { "intstat", "ml7396 interrupt status/enable", cmd_ml7396_get_interrupt_status },
     { "ml7396_reset", "ml7396 reset", cmd_ml7396_reset },
@@ -70,7 +57,9 @@ int main(void)
     shell_t shell;
     posix_open(uart0_handler_pid, 0);
 
-    puts("Welcome to RIOT!");
+    random_init();
+
+    puts("-- MMA-200 console");
 
     uart1_thread_init();
 

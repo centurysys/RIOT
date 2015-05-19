@@ -13,6 +13,8 @@
 
 #include <vtimer.h>
 
+#include "periph/random.h"
+
 /*
  *
  */
@@ -23,5 +25,19 @@ int cmd_vtimer_test(int argc, char **argv)
     vtimer_now(&now);
 
     printf("seconds = %lu, microseconds = %lu\n", now.seconds, now.microseconds);
+    return 0;
+}
+
+/*
+ *
+ */
+int cmd_random_test(int argc, char **argv)
+{
+    unsigned int val;
+
+    if (random_read((char *) &val, 4) == 4) {
+        printf("random: 0x%08x\n", val);
+    }
+
     return 0;
 }
