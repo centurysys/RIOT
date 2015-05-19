@@ -39,6 +39,8 @@
 #define INT_WAIT 4
 
 static mutex_t ml7396_mutex = MUTEX_INIT;
+static mutex_t ml7396_ex = MUTEX_INIT;
+
 //static int wait_interrupt = 0;
 
 static uint16_t radio_pan;
@@ -549,6 +551,17 @@ uint64_t ml7396_get_address_long(void)
     return radio_address_long;
 }
 
+void ml7396_get_address_long_buf(uint8_t *buf)
+{
+    uint64_t addr;
+    int i;
+
+    addr = ml7396_get_address_long();
+    for (i = 0; i < 8; i++) {
+        buf[i] = (uint8_t) ((addr >> (8 * (7 - i))) & 0xff);
+    }
+}
+
 static void _ml7396_set_pan_filter(void)
 {
     int i;
@@ -759,6 +772,17 @@ int ml7396_set_state(netdev_t *dev, netdev_state_t state)
 
     return 0;
 }
+
+void ml7396_lock(void)
+{
+    mutex_lock(&ml7396_ex);
+}
+
+void ml7396_unlock(void)
+{
+    mutex_unlock(&ml7396_ex);
+}
+
 
 static void _ml7396_wait_rf_stat(uint8_t stat, char *func)
 {

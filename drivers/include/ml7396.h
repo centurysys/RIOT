@@ -212,6 +212,8 @@ uint64_t ml7396_set_address_long(uint64_t addr);
  */
 uint64_t ml7396_get_address_long(void);
 
+void ml7396_get_address_long_buf(uint8_t *buf);
+
 /**
  * @brief Sets the pan ID of the ml7396.
  *
@@ -370,7 +372,10 @@ netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev);
  */
 int16_t ml7396_send(ml7396_packet_t *packet);
 int16_t ml7396_send_raw(char *buf, int len);
-int16_t ml7396_send_raw2(char *buf, int len);
+//int16_t ml7396_send_raw2(char *buf, int len);
+
+int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced);
+
 
 /**
  * RX Packet Buffer, read from the transceiver, filled by the ml7396_rx_handler.
@@ -393,6 +398,9 @@ uint8_t ml7396_get_trac_status(void);
 extern const netdev_802154_driver_t ml7396_driver;
 
 int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex);
+
+void ml7396_lock(void);
+void ml7396_unlock(void);
 
 
 #ifdef __cplusplus
