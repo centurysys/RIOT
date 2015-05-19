@@ -139,6 +139,9 @@ void create_usage(void)
 #ifdef MODULE_NATIVENET
          "        * native\n"
 #endif
+#ifdef MODULE_ML7396
+         "        * ml7396\n"
+#endif
         );
 }
 
@@ -436,6 +439,9 @@ int _net_if_ifconfig_create(char *transceivers_str)
         else if (strcasecmp(transceiver_str, "native") == 0) {
             transceivers |= TRANSCEIVER_NATIVE;
         }
+        else if (strcasecmp(transceiver_str, "ml7396") == 0) {
+            transceivers |= TRANSCEIVER_ML7396;
+        }
         else {
             create_usage();
             return 1;
@@ -621,6 +627,10 @@ int _net_if_ifconfig_list(int if_id)
 
     if (transceivers & TRANSCEIVER_NATIVE) {
         puts("             * native");
+    }
+
+    if (transceivers & TRANSCEIVER_ML7396) {
+        puts("             * ml7396");
     }
 
     while (net_if_iter_addresses(if_id, &addr_ptr)) {
