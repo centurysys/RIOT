@@ -82,7 +82,7 @@ static char idle_stack[KERNEL_CONF_STACKSIZE_IDLE];
 void kernel_init(void)
 {
     (void) disableIRQ();
-    printf("kernel_init(): This is RIOT! (Version: %s)\n", RIOT_VERSION);
+    printf("\nkernel_init(): This is RIOT! (Version: %s)\n", RIOT_VERSION);
 
     hwtimer_init();
 
