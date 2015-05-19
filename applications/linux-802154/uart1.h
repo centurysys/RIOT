@@ -12,6 +12,7 @@ enum uart1_msg_type_t {
     MSG_UART_RECEIVED,
 
     MSG_RF_RECEIVED,
+    MSG_ACK_RECEIVED,
     MSG_SEND_REQ,
 };
 

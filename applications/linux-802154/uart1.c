@@ -128,6 +128,10 @@ static int get_param_len(char cmd)
             len = 2;
             break;
 
+        case CMD_SET_LONG_ADDR:
+            len = 8;
+            break;
+
         default:
             len = -1;
     }
@@ -142,7 +146,12 @@ static int get_data_len(uart1_dev_t *dev)
 {
     int len;
 
-    len = (int) dev->params[0];
+    if (dev->cmd == CMD_TRANSMIT_BLK) {
+        len = (int) dev->params[0];
+    }
+    else {
+        len = -1;
+    }
 
     //printf("datalen = %d\n", len);
     return len;
@@ -173,7 +182,7 @@ void uart1_thread_init(void)
     mutex_init(&(uart_dev.tx_mutex));
     mutex_init(&(uart_dev.cmd_mutex));
 
-    mutex_lock(&(uart_dev.cmd_mutex));
+    //mutex_lock(&(uart_dev.cmd_mutex));
 
     /* create UART1 RX thread */
     pid = thread_create(uart1_rx_thread_stack,
@@ -235,10 +244,11 @@ static void send_uart2(uart1_dev_t *dev, char code, char *buf, int buflen)
     dev->send_buf[0] = 's';
     dev->send_buf[1] = '2';
     dev->send_buf[2] = code;
-    dev->send_buf[3] = (uint8_t) (buflen & 0xff);
-    memcpy(&dev->send_buf[4], buf, buflen);
+    //dev->send_buf[3] = 0xcc;
+    //dev->send_buf[4] = (uint8_t) (buflen & 0xff);
+    memcpy(&dev->send_buf[3], buf, buflen);
 
-    dev->send_len = buflen + 4;
+    dev->send_len = buflen + 3;
     dev->send_idx = 0;
 
 #if 0
@@ -481,23 +491,25 @@ static void _cmd_set_long_addr(uart1_dev_t *dev)
 
     long_addr = 0;
     for (i = 0; i < 8; i++) {
-        long_addr |= ((uint64_t) dev->params[i]) << (8 * (7 - i));
+        long_addr |= ((uint64_t) dev->params[i]) << (8 * i);
+        printf(" %02x", dev->params[i]);
     }
+    puts("");
 
     ml7396_set_address_long(long_addr);
 
     _get_msgbuf(&msgbuf, &buf);
 
     buf[0] = STATUS_SUCCESS;
-    buf[1] = ERR_NONE;
 
     msgbuf->code = RESPONSE(CMD_SET_LONG_ADDR);
     msgbuf->buf  = buf;
-    msgbuf->len  = 2;
+    msgbuf->len  = 1;
 
     msg.type = MSG_SEND_REQ;
     msg.content.ptr = (char *) msgbuf;
 
+    printf("%s: success\n", __FUNCTION__);
     msg_send(&msg, uart1_tx_handler_pid);
 }
 
@@ -592,6 +604,8 @@ static void _process_cmd(uart1_dev_t *dev)
 {
     struct cmd_handler *handler;
 
+    //printf("%s: cmd: %02x\n", __FUNCTION__, dev->cmd);
+
     for (handler = &cmd_handlers[0]; handler->func; handler++) {
         if (dev->cmd == handler->cmd) {
             handler->func(dev);
@@ -630,12 +644,45 @@ static void _rx_cb(void *arg, char data)
     handle_uart1_recv(dev, data);
 }
 
+static void timex_diff(timex_t *start, timex_t *end, timex_t *diff)
+{
+    if (start->seconds == 0 && start->microseconds == 0) {
+        diff->seconds = 0;
+        diff->microseconds = 0;
+    }
+    else {
+        diff->seconds = end->seconds - start->seconds;
+        if (start->microseconds > end->microseconds) {
+            diff->microseconds = 1 * 1000 * 1000 + end->microseconds - start->microseconds;
+            diff->seconds -= 1;
+        }
+        else {
+            diff->microseconds = end->microseconds - start->microseconds;
+        }
+    }
+}
+
+
 /*
  *
  */
 static void handle_uart1_recv(uart1_dev_t *dev, char data)
 {
     int next_state = STATE_UNDEF;
+    static timex_t last = {0, 0};
+    timex_t now, diff;
+    uint32_t diff_us;
+
+    vtimer_now(&now);
+    timex_diff(&last, &now, &diff);
+    last = now;
+
+    diff_us = diff.seconds * (1 * 1000 * 1000) + diff.microseconds;
+
+    if (dev->state != STATE_IDLE && diff_us > (50 * 1000)) {
+        puts("UART timeouted.");
+        _cleanup(dev);
+    }
 
     switch (dev->state) {
         case STATE_IDLE:
@@ -714,32 +761,74 @@ static void rf_receive_raw_cb(netdev_t *dev, void *buf, size_t len,
     msg_t msg;
     msgbuf_t *msgbuf;
     char *_buf;
+    ieee802154_frame_t frame;
 
-    _get_msgbuf(&msgbuf, &_buf);
+    ieee802154_frame_read(buf, &frame, len);
+
+    if (frame.fcf.frame_type != IEEE_802154_ACK_FRAME) {
+        _get_msgbuf(&msgbuf, &_buf);
 
 #if 1
-//    _buf[0] = lqi;
-//    _buf[1] = (uint8_t) (len & 0xff);
-    memcpy(_buf, buf, len);
+        _buf[0] = lqi;
+        _buf[1] = (uint8_t) (len & 0xff);
+        memcpy(&_buf[2], buf, len);
 #endif
 
-    msgbuf->code = CMD_RECEIVE_BLK;
-    msgbuf->buf  = _buf;
-    msgbuf->len  = len;
+        msgbuf->code = CMD_RECEIVE_BLK;
+        msgbuf->buf  = _buf;
+        msgbuf->len  = len + 2;
 
-    msg.type = MSG_RF_RECEIVED;
-    msg.content.ptr = (char *) msgbuf;
+        msg.type = MSG_RF_RECEIVED;
+        msg.content.ptr = (char *) msgbuf;
 
-    msg_send(&msg, uart1_tx_handler_pid);
+        msg_send(&msg, uart1_tx_handler_pid);
+    }
+    else {
+        /* ACK received */
+        //puts("ACK received.");
+        msg.type = MSG_ACK_RECEIVED;
+        msg_send(&msg, uart1_rx_handler_pid);
+    }
+}
+
+
+static void send_ack(uart1_dev_t *dev, char *buf, int buflen)
+{
+    ieee802154_frame_t frame;
+    uint16_t pan_id;
+    uint8_t addr[8];
+
+    ieee802154_frame_read(buf, &frame, buflen);
+
+    pan_id = ml7396_get_pan();
+    ml7396_get_address_long_buf(addr);
+
+    if ((frame.fcf.ack_req == 1) &&
+        (pan_id == frame.dest_pan_id) &&
+        (frame.fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
+        memcmp(frame.dest_addr, addr, 8) == 0) {
+        ml7396_send_ack(&frame, /* enhanced = */ 1);
+
+        //printf("%s: send ACK\n", __FUNCTION__);
+    }
 }
 
 
 static char transmit_buf[256];
 static int transmit_len;
 
+static void backoff(void)
+{
+
+
+}
+
 static int _transmit(uart1_dev_t *dev)
 {
-    int res;
+    int res, wait_ack, retry, i;
+    ieee802154_frame_t frame;
+    msg_t msg;
+    timex_t timeout;
 //  timex_t start, end, diff;
 
     //printf("%s: data_len = %d\n", __FUNCTION__, dev->data_len);
@@ -749,9 +838,44 @@ static int _transmit(uart1_dev_t *dev)
     memcpy(transmit_buf, dev->data, dev->data_len);
     transmit_len = dev->data_len;
 
-    res = ml7396_send_raw(dev->data, dev->data_len);
+    ieee802154_frame_read((uint8_t *) dev->data, &frame, dev->data_len);
+
+    //printf("%s: ack_req = %d\n", __FUNCTION__, frame.fcf.ack_req);
+
+    if (frame.fcf.ack_req == 1) {
+        retry = 3;
+        wait_ack = 1;
+    }
+    else {
+        retry = 1;
+        wait_ack = 0;
+    }
+
+    for (i = 0; i < retry; i++) {
+        res = ml7396_send_raw(dev->data, dev->data_len);
+
+        if (res == 0 && wait_ack == 1) {
+            timeout.seconds = 0;
+            timeout.microseconds = 5 * 1000; /* 5ms */
+
+            res = vtimer_msg_receive_timeout(&msg, timeout);
+            //printf("res=%d\n", res);
+
+            if (res == 1) {
+                res = 0;
+                break;
+            }
+            else {
+                res = -ETIMEDOUT;
+                usleep(10 * 1000);
+            }
+        }
+    }
 
 //  vtimer_now(&end);
+    if (res != 0) {
+        printf("%s: timeouted...\n", __FUNCTION__);
+    }
 
 #if 0
     int i;
@@ -781,14 +905,13 @@ static int _transmit(uart1_dev_t *dev)
     //end.seconds, end.microseconds, diff.seconds, diff.microseconds);
 #endif
 
-    msg_t msg;
     msgbuf_t *msgbuf;
     char *buf;
 
     /* response to host */
     _get_msgbuf(&msgbuf, &buf);
 
-    buf[0] = STATUS_SUCCESS;
+    buf[0] = (res == 0) ? STATUS_SUCCESS : STATUS_FAILURE;
 
     msgbuf->code = RESPONSE(CMD_TRANSMIT_BLK);
     msgbuf->buf  = buf;
@@ -830,6 +953,8 @@ static void *uart1_tx_thread(void *arg)
                 case MSG_RF_RECEIVED:
                     msgbuf = (msgbuf_t *) msg.content.ptr;
 
+                    send_ack(dev, &(msgbuf->buf[2]), msgbuf->len - 2);
+
                     /* maybe block */
                     send_uart2(dev, CMD_RECEIVE_BLK, msgbuf->buf, msgbuf->len);
                     break;
@@ -870,6 +995,7 @@ static void *uart1_rx_thread(void *arg)
                     break;
 
                 default:
+                    printf("%s: msg.type = %d\n", __FUNCTION__, msg.type);
                     break;
             }
         }

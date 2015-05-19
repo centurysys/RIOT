@@ -39,6 +39,7 @@ USEMODULE += ml7396
 USEMODULE += ieee802154
 USEMODULE += transceiver
 USEMODULE += sixlowpan
+USEMODULE += udp
 #USEMODULE += l2_ping
 #USEMODULE += random
 
