@@ -57,9 +57,9 @@ extern "C"
 #define LED_G_GPIO            GPIOD /**< GPIO-Device for Green LED*/
 #define LED_B_PORT            PORTA /**< PORT for Blue LED*/
 #define LED_B_GPIO            GPIOA /**< GPIO-Device for Blue LED*/
-#define LED_R_PIN             6	    /**< Red LED connected to PINx*/
-#define LED_G_PIN             4	    /**< Green LED connected to PINx*/
-#define LED_B_PIN             4	    /**< Blue LED connected to PINx*/
+#define LED_R_PIN             6     /**< Red LED connected to PINx*/
+#define LED_G_PIN             4     /**< Green LED connected to PINx*/
+#define LED_B_PIN             4     /**< Blue LED connected to PINx*/
 /** @} */
 
 /**
@@ -89,6 +89,17 @@ extern "C"
  * Define the type for the radio packet length for the transceiver
  */
 typedef uint8_t radio_packet_length_t;
+
+/**
+@name KW2XRF configuration
+@{
+*/
+#define KW2XRF_SPI        (SPI_1)
+#define KW2XRF_CS         (GPIO_24)
+#define KW2XRF_INT        (GPIO_23)
+#define KW2XRF_SPI_SPEED  (SPI_SPEED_10MHZ)
+#define KW2XRF_SHARED_SPI 0
+/** @}*/
 
 /**
  * @brief Initialize board specific hardware, including clock, LEDs and std-IO
