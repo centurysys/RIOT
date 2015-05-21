@@ -57,6 +57,12 @@ static char rx_buf_mem[STDIO_RX_BUFSIZE];
 static ringbuffer_t rx_buf;
 #endif
 
+#ifndef STDIO_TX_BUFSIZE
+#define STDIO_TX_BUFSIZE 1024
+#endif
+static char tx_buf_mem[STDIO_TX_BUFSIZE];
+static ringbuffer_t tx_buf;
+
 /**
  * @brief Receive a new character from the UART and put it into the receive buffer
  */
@@ -76,6 +82,22 @@ void rx_cb(void *arg, char data)
 #endif
 }
 
+static int tx_cb(void *arg)
+{
+    int ret;
+    char ch;
+
+    ret = ringbuffer_get_one(&tx_buf);
+    if (ret == -1) {
+        return 0;
+    }
+
+    ch = (char) (ret & 0xff);
+    uart_write(STDIO, ch);
+
+    return 1;
+}
+
 /**
  * @brief Initialize NewLib, called by __libc_init_array() from the startup script
  */
@@ -85,7 +107,8 @@ void _init(void)
     mutex_init(&uart_rx_mutex);
     ringbuffer_init(&rx_buf, rx_buf_mem, STDIO_RX_BUFSIZE);
 #endif
-    uart_init(STDIO, STDIO_BAUDRATE, rx_cb, 0, 0);
+    ringbuffer_init(&tx_buf, tx_buf_mem, STDIO_TX_BUFSIZE);
+    uart_init(STDIO, STDIO_BAUDRATE, rx_cb, tx_cb, 0);
 }
 
 /**
@@ -244,11 +267,14 @@ int _read_r(struct _reent *r, int fd, void *buffer, unsigned int count)
 int _write_r(struct _reent *r, int fd, const void *data, unsigned int count)
 {
     char *c = (char*)data;
+
     for (int i = 0; i < count; i++) {
         if (c[i] == '\n')
-            uart_write_blocking(STDIO, '\r');
-        uart_write_blocking(STDIO, c[i]);
+            ringbuffer_add_one(&tx_buf, '\r');
+        ringbuffer_add_one(&tx_buf, c[i]);
     }
+    uart_tx_begin(STDIO);
+
     return count;
 }
 

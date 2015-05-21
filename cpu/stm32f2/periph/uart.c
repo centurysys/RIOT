@@ -351,11 +351,16 @@ void UART_2_ISR(void)
 
 static inline void irq_handler(uint8_t uartnum, USART_TypeDef *dev)
 {
-    if (dev->SR & USART_SR_RXNE) {
+    volatile uint16_t sr, cr1;
+
+    sr = dev->SR;
+    cr1 = dev->CR1;
+
+    if (sr & USART_SR_RXNE) {
         char data = (char)dev->DR;
         uart_config[uartnum].rx_cb(uart_config[uartnum].arg, data);
     }
-    else if (dev->SR & USART_SR_TXE) {
+    if ((cr1 & USART_CR1_TXEIE) && (sr & USART_SR_TXE)) {
         if (uart_config[uartnum].tx_cb(uart_config[uartnum].arg) == 0) {
             dev->CR1 &= ~(USART_CR1_TXEIE);
         }
