@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <unistd.h>
+
 #include "vtimer.h"
 
 #include "ml7396_spi.h"
@@ -50,43 +52,9 @@ static void ml7396_spi_writes(uint8_t addr, const uint8_t *data, int len)
 {
     gpio_clear(ML7396_CS);
 
-    delay(1000);
-
     spi_transfer_regs(ML7396_SPI, REG_WR | ADDR(addr), (char *) data, 0, len);
-
-    delay(1000);
 
     gpio_set(ML7396_CS);
-}
-
-static void ml7396_spi_writes2(uint8_t addr, const uint8_t *data, int len)
-{
-    timex_t start, end;
-    int32_t elapsed_us, wait;
-
-    gpio_clear(ML7396_CS);
-
-    vtimer_now(&start);
-
-    spi_transfer_regs(ML7396_SPI, REG_WR | ADDR(addr), (char *) data, 0, len);
-
-    vtimer_now(&end);
-
-    elapsed_us = ((end.seconds - start.seconds) * 1000 * 1000 +
-                  (end.microseconds - start.microseconds));
-
-    if (elapsed_us < 200) {
-        wait = 200 - elapsed_us;
-
-        if (wait > 0) {
-            //delay(wait * 1000);
-        }
-
-        gpio_set(ML7396_CS);
-
-        if (wait > 0)
-            printf("%s: wait %d [us]\n", __FUNCTION__, wait);
-    }
 }
 
 static void ml7396_spi_reads(uint8_t addr, uint8_t *data, int len)
@@ -107,49 +75,46 @@ static void ml7396_bank_sel(uint8_t bank)
 void ml7396_reg_write(uint16_t reg, uint8_t value)
 {
     uint8_t bank, addr;
-    unsigned irqstate;
 
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     ml7396_spi_write(addr, value);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 }
 
 void ml7396_reg_writes(uint16_t reg, uint8_t *value, int len)
 {
     uint8_t bank, addr;
-    unsigned irqstate;
 
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     ml7396_spi_writes(addr, value, len);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 }
 
 uint8_t ml7396_reg_read(uint16_t reg)
 {
     uint8_t bank, addr, val;
-    unsigned irqstate;
 
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     val = ml7396_spi_read(addr);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 
     return val;
 }
@@ -157,50 +122,48 @@ uint8_t ml7396_reg_read(uint16_t reg)
 void ml7396_reg_reads(uint16_t reg, uint8_t *buf, int len)
 {
     uint8_t bank, addr;
-    unsigned irqstate;
 
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     ml7396_spi_reads(addr, buf, len);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 }
 
 /* fifo */
 void ml7396_fifo_read(uint8_t *data, radio_packet_length_t length)
 {
     uint8_t bank, addr;
-    unsigned irqstate;
 
     bank = REG2BANK(ML7396_REG_RD_RX_FIFO);
     addr = REG2ADDR(ML7396_REG_RD_RX_FIFO);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     ml7396_spi_reads(addr, data, (int) length);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 }
 
 void ml7396_fifo_write(const uint8_t *data, radio_packet_length_t length)
 {
     uint8_t bank, addr;
-    unsigned irqstate;
+    //unsigned irqstate;
 
     bank = REG2BANK(ML7396_REG_WR_TX_FIFO);
     addr = REG2ADDR(ML7396_REG_WR_TX_FIFO);
 
-    irqstate = disableIRQ();
+    spi_acquire(ML7396_SPI);
 
     ml7396_bank_sel(bank);
     ml7396_spi_writes(addr, data, (int) length);
 
-    restoreIRQ(irqstate);
+    spi_release(ML7396_SPI);
 }
 
 static uint32_t ml7396_get_interrupt_regs(uint16_t reg)
@@ -212,11 +175,9 @@ static uint32_t ml7396_get_interrupt_regs(uint16_t reg)
     ml7396_reg_reads(reg, buf, 4);
 
     for (i = 0; i < 4; i++) {
-        //printf("%s: buf[%d] = 0x%02x\n", __FUNCTION__, i, buf[i]);
         val |= ((uint32_t) buf[i]) << (8 * i);
     }
 
-    //printf("%s: val = 0x%08x\n", __FUNCTION__, val);
     return val;
 }
 
@@ -241,12 +202,8 @@ void ml7396_clear_interrupts(uint32_t interrupts)
 
     status = ~interrupts;
 
-    //dprintf("%s interrupts = 0x%08x, status = 0x%08x\n",
-    //__FUNCTION__, (unsigned int) interrupts, (unsigned int) status);
-
     for (i = 0; i < 4; i++) {
         buf[i] = (uint8_t) ((status >> (8 * i)) & 0xff);
-        //printf("INT_SOURCE_GRP%d <- 0x%02x\n", i+1, buf[i]);
     }
 
     ml7396_reg_writes(ML7396_REG_INT_SOURCE_GRP1, buf, 4);
@@ -260,14 +217,11 @@ void ml7396_set_interrupt_enable(uint32_t interrupts)
     int i;
 
     status = ml7396_get_interrupt_enable();
-    //dprintf("** %s: status before enable: 0x%08x, interrupts: 0x%08x\n",
-    //__FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status |= interrupts;
 
     for (i = 0; i < 4; i++) {
         buf[i] = (uint8_t) ((status >> (8 * i)) & 0xff);
-        //printf("%s: buf[%d] = 0x%02x\n", __FUNCTION__, i, buf[i]);
     }
 
     ml7396_reg_writes(ML7396_REG_INT_EN_GRP1, buf, 4);
@@ -281,14 +235,11 @@ void ml7396_set_interrupt_mask(uint32_t interrupts)
     int i;
 
     status = ml7396_get_interrupt_enable();
-    //dprintf("** %s: status before mask: 0x%08x, interrupts: 0x%08x\n",
-    //__FUNCTION__, (unsigned int) status, (unsigned int) interrupts);
 
     status &= ~interrupts;
 
     for (i = 0; i < 4; i++) {
         buf[i] = (uint8_t) ((status >> (8 * i)) & 0xff);
-        //printf("%s: buf[%d] = 0x%02x\n", __FUNCTION__, i, buf[i]);
     }
 
     ml7396_reg_writes(ML7396_REG_INT_EN_GRP1, buf, 4);
@@ -297,4 +248,11 @@ void ml7396_set_interrupt_mask(uint32_t interrupts)
 void ml7396_phy_reset(void)
 {
     ml7396_reg_write(ML7396_REG_RST_SET, (RST3_EN | RST3));
+
+    if (inISR()) {
+        delay(1000);
+    }
+    else {
+        usleep(5);
+    }
 }

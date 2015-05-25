@@ -9,6 +9,7 @@
 
 #include "ml7396.h"
 #include "ml7396_spi.h"
+#include "crc.h"
 
 /* CSMA parameters */
 static const uint32_t aUnitBackoffPeriod = 1130;
@@ -20,14 +21,12 @@ static const int macMaxBE = 8;
 
 static int16_t ml7396_load(ml7396_packet_t *packet);
 static int16_t ml7396_load_raw(char *buf, int len);
-static int16_t ml7396_load_raw2(char *buf, int len);
 static void ml7396_gen_pkt(uint8_t *buf, ml7396_packet_t *packet);
 
 static uint8_t sequence_nr;
-static uint8_t wait_for_ack;
 
 /* FCS is added in hardware */
-static uint8_t pkt[256];
+static uint8_t pkt[256 + 2];
 
 static ml7396_packet_t ml7396_tx_packet;
 
@@ -65,19 +64,20 @@ int16_t ml7396_send(ml7396_packet_t *packet)
     return result;
 }
 
+extern void uart1_rx_set(int stat);
+
 int16_t ml7396_send_raw(char *buf, int len)
 {
     int16_t result;
-    int i, retry, status, wait_ack;
+    int i, retry, status;
     uint32_t backoff;
     uint8_t rand;
 
-    ieee802154_frame_read(buf, &ml7396_tx_packet.frame, len);
-    //printf("%s: ack_req: %d\n", __FUNCTION__, ml7396_tx_packet.frame.fcf.ack_req);
+    ieee802154_frame_read((uint8_t *) buf, &ml7396_tx_packet.frame, len);
 
     if (ml7396_tx_packet.frame.fcf.ack_req == 1) {
         /* unicast */
-        retry = 3;
+        retry = 4;
     }
     else {
         retry = 1;
@@ -88,92 +88,48 @@ int16_t ml7396_send_raw(char *buf, int len)
         random_read((char *) &rand, 1);
         backoff = aUnitBackoffPeriod * rand; /* usecs */
 
+        uart1_rx_set(101);
+
         usleep(backoff);
+
+        uart1_rx_set(102);
 
         status = ml7396_channel_is_clear(&ml7396_netdev);
 
+        uart1_rx_set(103);
+
         if (status == 0) {
+            //printf("%d: rand: %d, backoff = %lu\n", i, (int) rand, backoff);
             break;
         }
     }
+
+    uart1_rx_set(104);
 
     if (status != 0) {
         return -1;
     }
 
+    uart1_rx_set(105);
+
     ml7396_lock();
+
+    uart1_rx_set(106);
 
     result = ml7396_load_raw(buf, len);
     if (result < 0) {
         goto ret;
     }
 
+    uart1_rx_set(107);
+
     ml7396_transmit_tx_buf(&ml7396_netdev);
     result = 0;
 
 ret:
+    uart1_rx_set(108);
     ml7396_unlock();
-    return result;
-}
-
-int16_t ml7396_send_raw2(char *buf, int len)
-{
-    int page;
-    int16_t result;
-    int retry, status;
-    uint32_t intstat;
-
-#if 1
-    /* CCA */
-    for (retry = 0; retry < 3; retry++) {
-        status = ml7396_channel_is_clear(&ml7396_netdev);
-
-        if (status == 0) {
-            break;
-        }
-        else {
-            usleep(1 * 1000);
-        }
-    }
-
-    if (status != 0) {
-        return -1;
-    }
-#endif
-
-    //ml7396_reg_write(ML7396_REG_FAST_TX_SET, 0x08);
-    ml7396_switch_to_tx();
-
-    result = ml7396_load_raw2(buf, len);
-    if (result < 0) {
-        return result;
-    }
-
-    while (1) {
-        status = ml7396_get_interrupt_status();
-        //ml7396_wait_interrupt(INT_TXFIFO0_DONE | INT_TXFIFO1_DONE, 0, &tx_mutex);
-
-        if (status & (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE))
-            break;
-    }
-
-    //printf("**** %s: wakeup! \n", __FUNCTION__);
-
-    intstat = ml7396_get_interrupt_status();
-    intstat &= (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE |
-                INT_TXFIFO0_REQ | INT_TXFIFO1_REQ |
-                INT_RFSTAT_CHANGE);
-
-    if (intstat & INT_TXFIFO0_DONE) {
-        page = 0;
-    }
-    else {
-        page = 1;
-    }
-
-    //dprintf(" clear interrupt with 0x%08x\n", (unsigned int) status);
-    ml7396_clear_interrupts(intstat);
-
+    uart1_rx_set(109);
     return result;
 }
 
@@ -185,7 +141,7 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     int16_t result;
     uint32_t status;
 
-    //printf("*** %s ***\n", __FUNCTION__);
+    ml7396_switch_to_trx_off();
 
     memset(&packet, 0, sizeof(ml7396_packet_t));
 
@@ -198,6 +154,7 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     else {
         packet.frame.dest_pan_id = frame->src_pan_id;
     }
+
     memcpy(packet.frame.dest_addr, frame->src_addr, 8);
 
     if (frame->src_pan_id == frame->dest_pan_id) {
@@ -253,7 +210,6 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     }
 
     if (done == 1) {
-        //dprintf(" ---> TX-FIFO request accepted.\n");
         ml7396_transmit_tx_buf(&ml7396_netdev);
         result = 0;
     }
@@ -268,62 +224,25 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
 
 netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev)
 {
-    int page;
-    mutex_t tx_mutex = MUTEX_INIT;
     uint32_t status;
-    uint8_t reg;
 
-    reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
     ml7396_switch_to_tx();
 
     while (1) {
         status = ml7396_get_interrupt_status();
-        //ml7396_wait_interrupt(INT_TXFIFO0_DONE | INT_TXFIFO1_DONE, 0, &tx_mutex);
 
         if (status & (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE))
             break;
     }
-
-    reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
 
     status = ml7396_get_interrupt_status();
     status &= (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE |
                INT_TXFIFO0_REQ | INT_TXFIFO1_REQ |
                INT_RFSTAT_CHANGE);
 
-    if (status & INT_TXFIFO0_DONE) {
-        page = 0;
-    }
-    else {
-        page = 1;
-    }
-
-    //dprintf(" clear interrupt with 0x%08x\n", (unsigned int) status);
     ml7396_clear_interrupts(status);
 
     status = ml7396_get_interrupt_status();
-    //dprintf(" --> interrupt status: 0x%08x\n", (unsigned int) status);
-
-#if 0
-    reg = (page == 0) ? (PD_DATA_REQ0 | PD_DATA_CFM0) : (PD_DATA_REQ1 | PD_DATA_CFM1);
-    ml7396_reg_write(ML7396_REG_INT_PD_DATA_REQ, ~reg);
-#endif
-    reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
-    //dprintf(" PD_DATA_REQ: 0x%02x\n", reg);
-
-    //ml7396_switch_to_trx_off();
-
-#if 0
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP3, 0x00);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP2, 0x00);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP2, 0x00);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP3, 0x00);
-
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP1, 0xfd);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP2, 0xff);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP3, 0xff);
-    ml7396_reg_write(ML7396_REG_INT_SOURCE_GRP4, 0x03);
-#endif
 
     ml7396_switch_to_rx();
 
@@ -334,7 +253,6 @@ static int16_t ml7396_load(ml7396_packet_t *packet)
 {
     int i, done;
     uint32_t status;
-    uint8_t reg;
 
     /* RX on 状態だと、TX FIFO に書き込んだ最後の2octetsの書き込みが無視される */
     /*  --> CRC機能をしようしなければ問題ない模様 */
@@ -393,15 +311,8 @@ static int16_t ml7396_load(ml7396_packet_t *packet)
     }
     puts("");
 #endif
-    reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
-    //dprintf("FIFO_BANK: 0x%02x\n", reg);
 
-    /* load packet into fifo */
-    //ml7396_phy_reset();
     ml7396_fifo_write(pkt, packet->length + 2);
-
-    reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
-    //dprintf("FIFO_BANK: 0x%02x\n", reg);
 
     done = 0;
     for (i = 0; i < 100; i++) {
@@ -428,11 +339,15 @@ static int16_t ml7396_load_raw(char *buf, int len)
 {
     int i, done;
     uint32_t status;
-    uint8_t reg;
 
-    //ml7396_switch_to_trx_off();
+    if (len < 0 || len > 255) {
+        printf("! %s: length err (%d)\n", __FUNCTION__, len);
+        return -1;
+    }
 
-    memset(pkt, 0, 256);
+    ml7396_switch_to_trx_off();
+
+    memset(pkt, 0, 256 + 2);
 
     pkt[0] = 0x10;
     pkt[1] = len;
@@ -440,9 +355,6 @@ static int16_t ml7396_load_raw(char *buf, int len)
     memcpy(&pkt[2], buf, len);
 
     ml7396_fifo_write((uint8_t *) pkt, len + 2);
-
-    reg = ml7396_reg_read(ML7396_REG_FIFO_BANK);
-    //dprintf("FIFO_BANK: 0x%02x\n", reg);
 
     done = 0;
     for (i = 0; i < 100; i++) {
@@ -469,24 +381,6 @@ static int16_t ml7396_load_raw(char *buf, int len)
         printf("%s: TX-FIFO timeouted...\n", __FUNCTION__);
         return -1;
     }
-
-    return len + 2;
-}
-
-static int16_t ml7396_load_raw2(char *buf, int len)
-{
-    int i, done;
-    uint32_t status;
-    uint8_t reg;
-
-    memset(pkt, 0, 256);
-
-    pkt[0] = 0x10;
-    pkt[1] = len + 2;
-
-    memcpy(&pkt[2], buf, len);
-
-    ml7396_fifo_write((uint8_t *) pkt, len + 2 + 2);
 
     return len + 2;
 }

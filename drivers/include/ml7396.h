@@ -108,6 +108,7 @@ extern uint8_t driver_state;
 int ml7396_initialize(netdev_t *dev);
 
 void ml7396_reset(void);
+void ml7396_phy_reset(void);
 
 #ifdef MODULE_TRANSCEIVER
 /**
@@ -316,7 +317,7 @@ int ml7396_rem_data_recv_callback(netdev_t *dev,
  * @brief RX handler, process data from the RX FIFO.
  *
  */
-void ml7396_rx_handler(uint32_t status);
+int ml7396_rx_handler(uint32_t status);
 
 /**
  * @brief Prepare the ml7396 TX buffer to send with the given packet.

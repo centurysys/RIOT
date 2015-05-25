@@ -7,6 +7,10 @@ extern "C" {
 
 #define ML7396_RX_BUF_SIZE   3
 
+enum ml7396_msg_type_t {
+    MSG_ML7396_IRQ,
+};
+
 /* common */
 #define BIT(x)  (1 << (x))
 #define BANK(x) ((x) << 8)

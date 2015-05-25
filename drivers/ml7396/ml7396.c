@@ -23,9 +23,12 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "thread.h"
+#include "msg.h"
+
+#include "board.h"
 #include "ml7396.h"
 #include "ml7396_spi.h"
-#include "board.h"
 #include "periph/gpio.h"
 #include "periph/spi.h"
 #include "kernel_types.h"
@@ -37,6 +40,10 @@
 //#define DEBUG
 
 #define INT_WAIT 4
+
+kernel_pid_t ml7396_irq_thread_pid = KERNEL_PID_UNDEF;
+static char ml7396_irq_thread_stack[1024];
+
 
 static mutex_t ml7396_mutex = MUTEX_INIT;
 static mutex_t ml7396_ex = MUTEX_INIT;
@@ -59,6 +66,10 @@ static void ml7396_spi_init(void);
 static void ml7396_gpio_interrupt_init(void);
 static void ml7396_rf_init(void);
 
+static void *ml7396_irq_thread(void *arg);
+static void ml7396_irq_bh(void);
+
+
 #ifndef ML7396_SPI_SPEED
 #define SPI_SPEED    SPI_SPEED_15MHZ
 #else
@@ -79,9 +90,10 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
 {
     int i, res = -EBUSY;
     struct wait_interrupt *wait = NULL;
-    unsigned irqstate;
+    //unsigned irqstate;
 
-    irqstate = disableIRQ();
+    //irqstate = disableIRQ();
+    ml7396_disableIRQ();
 
     for (i = 0; i < INT_WAIT; i++) {
         if (!int_waits[i].int_wait) {
@@ -90,18 +102,20 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
     }
 
     if (!wait) {
-        goto ret;
+        ml7396_enableIRQ();
+        return res;
     }
 
     wait->int_wait = interrupts;
     wait->clear = clear;
     wait->mutex = mutex;
 
-    restoreIRQ(irqstate);
+    //restoreIRQ(irqstate);
+    ml7396_enableIRQ();
 
     mutex_lock(mutex);
 
-    irqstate = disableIRQ();
+    //irqstate = disableIRQ();
 
     if (wait->clear)
         ml7396_clear_interrupts(interrupts);
@@ -112,8 +126,7 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
 
     res = 0;
 
-ret:
-    restoreIRQ(irqstate);
+    //restoreIRQ(irqstate);
 
     return res;
 }
@@ -137,6 +150,20 @@ int ml7396_wakeup_interrupt(uint32_t interrupt)
 
 int ml7396_initialize(netdev_t *dev)
 {
+    kernel_pid_t pid;
+
+    if (ml7396_irq_thread_pid == KERNEL_PID_UNDEF) {
+        pid = thread_create(ml7396_irq_thread_stack,
+                            sizeof(ml7396_irq_thread_stack),
+                            3,
+                            CREATE_STACKTEST | CREATE_SLEEPING,
+                            ml7396_irq_thread,
+                            NULL,
+                            "ml7396_bh");
+        ml7396_irq_thread_pid = pid;
+        thread_wakeup(pid);
+    }
+
     ml7396_spi_init();
     ml7396_gpio_interrupt_init();
 
@@ -157,11 +184,12 @@ static void ml7396_spi_init(void)
 {
     int res;
 
-    spi_acquire(ML7396_SPI);
     res = spi_init_master(ML7396_SPI, SPI_CONF_FIRST_RISING, SPI_SPEED);
-    spi_release(ML7396_SPI);
 
-    //dprintf("%s: spi_init_master -> %d\n", __FUNCTION__, res);
+    if (res < 0) {
+        printf("%s: spi_init_master failed.\n", __FUNCTION__);
+        return;
+    }
 
     gpio_init_out(ML7396_CS, GPIO_PULLUP);
     gpio_init_out(ML7396_RESET, GPIO_PULLUP);
@@ -211,6 +239,7 @@ static struct ml7396_setting rf_settings[] = {
     { ML7396_REG_RST_SET, 0x00 },
     { ML7396_REG_RATE_SET1, 0x00 },
     { ML7396_REG_RATE_SET2, 0x00 },
+    { ML7396_REG_ADC_CLK_SET, 0xd3 },
     { ML7396_REG_GAIN_MtoL, 0x1e },
     { ML7396_REG_GAIN_LtoH, 0x02 },
     { ML7396_REG_GAIN_HtoM, 0x9e },
@@ -404,39 +433,60 @@ void ml7396_reset(void)
     ml7396_switch_to_rx();
 }
 
-
+/*
+ * ML7396 GPIO IRQ handler
+ */
 static void ml7396_irq(void)
 {
-    int res;
+    msg_t msg;
+
+    msg.type = MSG_ML7396_IRQ;
+    msg_send_int(&msg, ml7396_irq_thread_pid);
+}
+
+/*
+ * ML7396 GPIO IRQ handle bottom-half
+ */
+static void ml7396_irq_bh(void)
+{
+    int page;
     uint32_t status, enable;
-    uint8_t pd_req, pd_ind;
 
     enable = ml7396_get_interrupt_enable();
     status = ml7396_get_interrupt_status();
-    pd_req = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
-    pd_ind = ml7396_reg_read(ML7396_REG_INT_PD_DATA_IND);
 
-    /*dprintf("%s: enable = 0x%08x, status = 0x%08x\n"
-            "  PD_DATA_REQ = 0x%02x, PD_DATA_IND = 0x%02x\n",
-            __FUNCTION__, (unsigned int) enable, (unsigned int) status,
-            (unsigned int) pd_req, (unsigned int) pd_ind);*/
+    /* FIFO 0/1 RX Done/CRCError interrupt */
+    if (status & (INT_RXFIFO0_DONE | INT_RXFIFO1_DONE |
+                  INT_RXFIFO0_CRCERR | INT_RXFIFO1_CRCERR |
+                  INT_RXFIFO_ERR)) {
+        page = ml7396_rx_handler(status);
 
-    /* FIFO 0/1 RX Done interrupt */
-    if (status & (INT_RXFIFO0_DONE | INT_RXFIFO1_DONE)) {
-        if (pd_ind & (PD_DATA_IND0 | PD_DATA_IND1)) {
-            ml7396_rx_handler(status);
+        if (page == 0) {
+            if (status & INT_RXFIFO0_DONE) {
+                status &= ~INT_RXFIFO0_DONE;
+            }
+            if (status & INT_RXFIFO0_CRCERR) {
+                status &= ~INT_RXFIFO0_CRCERR;
+            }
+        }
+        else if (page == 1) {
+            if (status & INT_RXFIFO1_DONE) {
+                status &= ~INT_RXFIFO1_DONE;
+            }
+            if (status & INT_RXFIFO1_CRCERR) {
+                status &= ~INT_RXFIFO1_CRCERR;
+            }
+        }
 
-            status &= ~(INT_RXFIFO0_DONE | INT_RXFIFO1_DONE);
+        if (status & INT_RXFIFO_ERR) {
+            status &= ~INT_RXFIFO_ERR;
         }
     }
 
     /* wakeup thread */
-    res = ml7396_wakeup_interrupt(status);
-//    if (res > 0)
-//        dprintf("%s: wakeup %d\n", __FUNCTION__, res);
+    ml7396_wakeup_interrupt(status);
 
     if (status & enable) {
-        //ml7396_clear_interrupts(status & enable);
         enable &= ~status;
     }
 
@@ -484,22 +534,32 @@ int ml7396_rem_data_recv_callback(netdev_t *dev,
 int ml7396_channel_is_clear(netdev_t *dev)
 {
     uint8_t status;
+    uint32_t intstat;
     int result;
 
-    ml7396_set_interrupt_enable(INT_RFSTAT_CHANGE | INT_CCA_COMPLETE);
+    //ml7396_set_interrupt_enable(INT_RFSTAT_CHANGE | INT_CCA_COMPLETE);
+    ml7396_set_interrupt_mask(INT_CCA_COMPLETE);
 
     /* CCA Enable */
     ml7396_reg_write(ML7396_REG_CCA_CNTRL, CCA_EN);
     /* RF ON */
-    //ml7396_reg_write(ML7396_REG_RF_STATUS, SET_RX_ON);
     ml7396_switch_to_rx();
 
-    ml7396_wait_interrupt(INT_CCA_COMPLETE, 1, &ml7396_mutex);
+    //ml7396_wait_interrupt(INT_CCA_COMPLETE, 1, &ml7396_mutex);
 
-    ml7396_set_interrupt_mask(INT_CCA_COMPLETE);
+    while (1) {
+        intstat = ml7396_get_interrupt_status();
+
+        if (intstat & INT_CCA_COMPLETE) {
+            break;
+        }
+
+        usleep(20);
+    }
+
+    ml7396_clear_interrupts(INT_CCA_COMPLETE);
 
     status = ml7396_reg_read(ML7396_REG_CCA_CNTRL);
-    //dprintf("%s: CCA_STATUS = 0x%02x\n", __FUNCTION__, status);
 
     if (CCA_RSLT(status) == CCA_RSLT_IDLE) {
         result = 0;
@@ -507,8 +567,6 @@ int ml7396_channel_is_clear(netdev_t *dev)
     else {
         result = -1;
     }
-
-    //ml7396_switch_to_trx_off();
 
     return result;
 }
@@ -784,7 +842,7 @@ void ml7396_unlock(void)
 }
 
 
-static void _ml7396_wait_rf_stat(uint8_t stat, char *func)
+static void __attribute__((unused)) _ml7396_wait_rf_stat(uint8_t stat, const char *func)
 {
     volatile uint8_t reg;
 
@@ -823,10 +881,37 @@ void ml7396_switch_to_tx(void)
 
 void ml7396_switch_to_trx_off(void)
 {
-    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TRX_OFF);
+    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_FORCE_TRX_OFF);
 
     _ml7396_wait_rf_stat(STAT_TRX_OFF, __FUNCTION__);
 }
+
+/*
+ * IRQ handle bottom-half
+ */
+static void *ml7396_irq_thread(void *arg)
+{
+    int res;
+    msg_t msg;
+
+    while (1) {
+        res = msg_receive(&msg);
+
+        if (res == 1) {
+            switch (msg.type) {
+                case MSG_ML7396_IRQ:
+                    ml7396_irq_bh();
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 
 const netdev_802154_driver_t ml7396_driver = {
     .init = ml7396_initialize,

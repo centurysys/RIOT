@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include "board.h"
+#include "periph/gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,16 @@ extern "C" {
 #else
 #define dprintf(fmt, arg...) do {} while (0)
 #endif
+
+static inline void ml7396_disableIRQ(void)
+{
+    gpio_irq_disable(ML7396_INT);
+}
+
+static inline void ml7396_enableIRQ(void)
+{
+    gpio_irq_enable(ML7396_INT);
+}
 
 void ml7396_reg_write(uint16_t addr, uint8_t value);
 uint8_t ml7396_reg_read(uint16_t addr);

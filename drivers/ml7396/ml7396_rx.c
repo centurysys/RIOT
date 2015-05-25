@@ -18,75 +18,142 @@ volatile uint8_t rx_buffer_next;
 extern netdev_802154_raw_packet_cb_t ml7396_raw_packet_cb;
 
 
-static inline void _ml7396_clear_rx_interrupts(int page)
+static inline void _ml7396_clear_rx_interrupts(int page, int clear_fifo)
 {
-    uint32_t interrupts = 0;
+    uint32_t interrupts = 0, status;
+
+    status = ml7396_get_interrupt_status();
+
+    if (status & INT_RXFIFO_ERR) {
+        puts("! RXFIFO_ERR -> clear_fifo");
+        interrupts |= INT_RXFIFO_ERR;
+    }
 
     if (page == 0) {
         interrupts |= (INT_RXFIFO0_DONE | INT_RXFIFO0_CRCERR);
+        if ((clear_fifo == 1) && (status & INT_FIFO_CLR0)) {
+            //interrupts |= INT_FIFO_CLR0;
+        }
     }
     else {
         interrupts |= (INT_RXFIFO1_DONE | INT_RXFIFO1_CRCERR);
+        if ((clear_fifo == 1) && (status & INT_FIFO_CLR1)) {
+            //interrupts |= INT_FIFO_CLR1;
+        }
     }
 
-    //dprintf("*** clear with: 0x%08x\n", (unsigned int) interrupts);
+    if (clear_fifo == 1) {
+        printf("*** clear with: 0x%08x (status: 0x%08x)\n",
+               (unsigned int) interrupts, (unsigned int) status);
+        ml7396_phy_reset();
+    }
+
     ml7396_clear_interrupts(interrupts);
-    ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0x00);
+    //ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0x00);
+
+    if (clear_fifo == 1) {
+        status = ml7396_get_interrupt_status();
+        printf(" --> after (status: 0x%08x)\n", (unsigned int) status);
+    }
 }
 
-void ml7396_rx_handler(uint32_t status)
+int ml7396_rx_handler(uint32_t status)
 {
-    int i, phr_len, page, crc_ok;
+    int phr_len, page, complete, crc_ok, clear_fifo;
+    int int_pend[2] = {0, 0};
     uint8_t *buf, lqi, fcs_rssi;
     uint16_t tmp, crc, crc_received;
+    static int last_page = -1;
+
+    clear_fifo = 0;
 
     /* detect FIFO page */
     if (status & (INT_RXFIFO0_DONE | INT_RXFIFO0_CRCERR)) {
+        int_pend[0] = 1;
+    }
+    if (status & (INT_RXFIFO1_DONE | INT_RXFIFO1_CRCERR)) {
+        int_pend[1] = 1;
+    }
+
+    if ((int_pend[0] == 1) && (int_pend[1] == 1)) {
+        if ((last_page == -1) || (last_page == 1)) {
+            page = 0;
+        }
+        else {
+            page = 1;
+        }
+    }
+    else if (int_pend[0] == 1) {
         page = 0;
     }
-    else if (status & (INT_RXFIFO1_DONE | INT_RXFIFO1_CRCERR)) {
+    else if (int_pend[1] == 1) {
         page = 1;
     }
     else {
-        return;
+        printf("%s: page ???\n", __FUNCTION__);
+        return -1;
+    }
+
+    if (status & (INT_RXFIFO0_DONE | INT_RXFIFO1_DONE)) {
+        complete = 1;
+    }
+    else {
+        complete = 0;
+    }
+
+    if (status & (INT_RXFIFO0_CRCERR | INT_RXFIFO1_CRCERR)) {
+        crc_ok = 0;
+    }
+    else {
+        crc_ok = 1;
+    }
+
+    if (complete == 0 && crc_ok == 0) {
+        printf("%s: [%d] crcerr, return\n",
+               __FUNCTION__, page);
+
+        clear_fifo = 1;
+        goto ret;
     }
 
     /* read PHR (2-octets) */
     ml7396_fifo_read((uint8_t *) &tmp, 2);
 
-    phr_len = (int) (NTOHS(tmp) & 0x07ff) - 2;
-    ml7396_rx_buffer[rx_buffer_next].length = phr_len;
+    phr_len = (int) (NTOHS(tmp) & 0xff) - 2;
+
+    if (phr_len < 10) {
+        printf("%s: ??? phr_len = %d, intstat = 0x%08x, page = %d\n",
+               __FUNCTION__, phr_len, (unsigned int) status, page);
+        clear_fifo = 1;
+        goto ret;
+    }
 
     /* read psdu */
     buf = buffer[rx_buffer_next];
     ml7396_fifo_read(buf, phr_len + 2 + 1);
 
-    /* read ED */
+    /* set length, ED */
+    ml7396_rx_buffer[rx_buffer_next].length = phr_len;
     ml7396_rx_buffer[rx_buffer_next].ed = buf[phr_len + 2 + 1];
-
-#if 0
-    for (i = 0; i < phr_len + 2; i++) {
-        printf(" %02x", buf[i]);
-        if ((i % 16) == 15)
-            puts("");
-    }
-    puts("");
-    printf("ED: %02x\n", buf[phr_len + 2 + 1]);
-#endif
 
     crc = crc_ccitt(0, buf, phr_len);
     crc_received = buf[phr_len] | buf[phr_len + 1] << 8;
 
     if (crc == crc_received) {
+#if 0
+        printf("CRC OK, received: %02x %02x, calc: %04x, status: 0x%08x, len: %d\n",
+               buf[phr_len], buf[phr_len+1], crc, status, phr_len);
+#endif
         crc_ok = 1;
     }
     else {
-        printf("! CRC(received) %02x %02x, calc: %04x\n",
-               buf[phr_len], buf[phr_len+1], crc);
+        printf("! [%d] CRC(received) %02x%02x, calc: %04x, status: 0x%08x, len: %d\n",
+               page, buf[phr_len+1], buf[phr_len], crc, (unsigned int) status, phr_len);
         crc_ok = 0;
     }
 
     if (crc_ok == 0) {
+        clear_fifo = 1;
         goto ret;
     }
 
@@ -110,36 +177,10 @@ void ml7396_rx_handler(uint32_t status)
 
     /* if packet is no ACK */
     if (ml7396_rx_buffer[rx_buffer_next].frame.fcf.frame_type != IEEE_802154_ACK_FRAME) {
-#if 0
-        printf("pan_id: %04x (received: %04x)", pan_id, frame->dest_pan_id);
-        if (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) {
-            printf(", dest_addr: ");
-            for (i = 0; i < 8; i++) {
-                printf("%02x", addr[7 - i]);
-                if (i < 7)
-                    printf("-");
-            }
-            printf(" (received: ");
-            for (i = 0; i < 8; i++) {
-                printf("%02x", frame->dest_addr[7 - i]);
-                if (i < 7)
-                    printf("-");
-            }
-            puts(")");
-        }
-        else {
-            puts("");
-        }
-
-        if ((frame->fcf.ack_req == 1) &&
-            (pan_id == frame->dest_pan_id) &&
-            (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
-            memcmp(frame->dest_addr, addr, 8) == 0) {
-            ml7396_send_ack(frame, /* enhanced = */ 1);
-        }
-#endif
-
         if (ml7396_raw_packet_cb != NULL) {
+            fcs_rssi = 0;
+            lqi = 0;
+
             ml7396_raw_packet_cb(&ml7396_netdev, (void*)buf,
                                  ml7396_rx_buffer[rx_buffer_next].length,
                                  fcs_rssi, lqi, (fcs_rssi >> 7));
@@ -157,21 +198,15 @@ void ml7396_rx_handler(uint32_t status)
 #endif
     }
     else {
-//        puts("IEEE_802154_ACK_FRAME");
-        //ieee802154_frame_print_fcf_frame(&ml7396_rx_buffer[rx_buffer_next].frame);
-#if 0
-        for (i = 0; i < phr_len; i++) {
-            printf(" %02x", buf[i]);
-            if ((i % 16) == 15)
-                puts("");
-        }
-        puts("");
-#endif
+        //puts("IEEE_802154_ACK_FRAME");
         if ((pan_id == frame->dest_pan_id) &&
             (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
             memcmp(frame->dest_addr, addr, 8) == 0) {
-//            puts("to me.");
+
             if (ml7396_raw_packet_cb != NULL) {
+                fcs_rssi = 0;
+                lqi = 0;
+
                 ml7396_raw_packet_cb(&ml7396_netdev, (void*)buf,
                                      ml7396_rx_buffer[rx_buffer_next].length,
                                      fcs_rssi, lqi, (fcs_rssi >> 7));
@@ -189,5 +224,8 @@ void ml7396_rx_handler(uint32_t status)
 
 ret:
     /* clear interrupts */
-    _ml7396_clear_rx_interrupts(page);
+    _ml7396_clear_rx_interrupts(page, clear_fifo);
+
+    last_page = page;
+    return page;
 }
