@@ -10,7 +10,7 @@
  * @addtogroup  core_util
  * @{
  *
- * @file        debug.h
+ * @file
  * @brief       Debug-header
  *
  * @details     If *ENABLE_DEBUG* is defined inside an implementation file, all
@@ -57,7 +57,7 @@ extern "C" {
 #include "cpu-conf.h"
 #define DEBUG_PRINT(...) \
     do { \
-        if ((sched_active_thread == NULL) || (sched_active_thread->stack_size > KERNEL_CONF_STACKSIZE_PRINTF)) { \
+        if ((sched_active_thread == NULL) || (sched_active_thread->stack_size > THREAD_EXTRA_STACKSIZE_PRINTF)) { \
             printf(__VA_ARGS__); \
         } \
         else { \
