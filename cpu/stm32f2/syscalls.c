@@ -58,7 +58,7 @@ static ringbuffer_t rx_buf;
 #endif
 
 #ifndef STDIO_TX_BUFSIZE
-#define STDIO_TX_BUFSIZE 1024
+#define STDIO_TX_BUFSIZE 4096
 #endif
 static char tx_buf_mem[STDIO_TX_BUFSIZE];
 static ringbuffer_t tx_buf;
@@ -86,15 +86,20 @@ static int tx_cb(void *arg)
 {
     int ret;
     char ch;
+    unsigned int intstat;
+
+    intstat = disableIRQ();
 
     ret = ringbuffer_get_one(&tx_buf);
     if (ret == -1) {
+        restoreIRQ(intstat);
         return 0;
     }
 
     ch = (char) (ret & 0xff);
     uart_write(STDIO, ch);
 
+    restoreIRQ(intstat);
     return 1;
 }
 
@@ -266,14 +271,20 @@ int _read_r(struct _reent *r, int fd, void *buffer, unsigned int count)
  */
 int _write_r(struct _reent *r, int fd, const void *data, unsigned int count)
 {
-    char *c = (char*)data;
+    char *c = (char *) data;
+    unsigned int intstat;
+
+    intstat = disableIRQ();
 
     for (int i = 0; i < count; i++) {
         if (c[i] == '\n')
             ringbuffer_add_one(&tx_buf, '\r');
         ringbuffer_add_one(&tx_buf, c[i]);
     }
+
     uart_tx_begin(STDIO);
+
+    restoreIRQ(intstat);
 
     return count;
 }
