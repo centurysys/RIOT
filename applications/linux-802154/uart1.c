@@ -21,6 +21,8 @@
 #include "ml7396_spi.h"
 
 #include "uart1.h"
+#include "utils.h"
+
 
 /* CSMA parameters */
 static const uint32_t aUnitBackoffPeriod = 1130;
@@ -28,6 +30,9 @@ static const int macMaxCSMABackoffs = 4;
 static const int macMinBE = 8;
 static const int macMaxBE = 8;
 static const int macMaxFrameRetries = 3;
+
+static int uart_rx_thread_stat;
+static timex_t last_stat_time;
 
 
 enum uart1_rx_state {
@@ -83,9 +88,9 @@ typedef struct uart1_dev {
     int opened;
     int state;
 
-    char cmd;
-    char params[16];
-    char data[255];
+    uint8_t cmd;
+    uint8_t params[16];
+    uint8_t data[255];
 
     int param_len;
     int data_len;
@@ -98,7 +103,7 @@ typedef struct uart1_dev {
     /* TX side */
     mutex_t tx_mutex;
 
-    char send_buf[256];
+    uint8_t send_buf[256];
     int send_len;
     int send_idx;
 } uart1_dev_t;
@@ -161,7 +166,6 @@ static int get_data_len(uart1_dev_t *dev)
         len = -1;
     }
 
-    //printf("datalen = %d\n", len);
     return len;
 }
 
@@ -196,7 +200,7 @@ void uart1_thread_init(void)
     pid = thread_create(uart1_rx_thread_stack,
                         sizeof(uart1_rx_thread_stack),
                         //PRIORITY_MAIN - 1,
-                        3,
+                        4,
                         CREATE_STACKTEST | CREATE_SLEEPING,
                         uart1_rx_thread,
                         &uart_dev,
@@ -209,7 +213,7 @@ void uart1_thread_init(void)
     pid = thread_create(uart1_tx_thread_stack,
                         sizeof(uart1_tx_thread_stack),
                         //PRIORITY_MAIN - 1,
-                        3,
+                        2,
                         CREATE_STACKTEST | CREATE_SLEEPING,
                         uart1_tx_thread,
                         &uart_dev,
@@ -227,8 +231,6 @@ void uart1_thread_init(void)
  */
 static void send_uart(uart1_dev_t *dev, char code, char *buf, int buflen)
 {
-    //printf("* %s (len: %d)\n", __FUNCTION__, buflen);
-
     mutex_lock(&dev->tx_mutex);
 
     dev->send_buf[0] = 's';
@@ -240,7 +242,6 @@ static void send_uart(uart1_dev_t *dev, char code, char *buf, int buflen)
     dev->send_idx = 0;
 
     uart_tx_begin(HOSTIF);
-    //printf("tx_begin\n");
 }
 
 static void send_uart2(uart1_dev_t *dev, char code, char *buf, int buflen)
@@ -500,9 +501,7 @@ static void _cmd_set_long_addr(uart1_dev_t *dev)
     long_addr = 0;
     for (i = 0; i < 8; i++) {
         long_addr |= ((uint64_t) dev->params[i]) << (8 * i);
-        printf(" %02x", dev->params[i]);
     }
-    puts("");
 
     ml7396_set_address_long(long_addr);
 
@@ -517,7 +516,6 @@ static void _cmd_set_long_addr(uart1_dev_t *dev)
     msg.type = MSG_SEND_REQ;
     msg.content.ptr = (char *) msgbuf;
 
-    printf("%s: success\n", __FUNCTION__);
     msg_send(&msg, uart1_tx_handler_pid);
 }
 
@@ -670,7 +668,6 @@ static void timex_diff(timex_t *start, timex_t *end, timex_t *diff)
     }
 }
 
-
 /*
  *
  */
@@ -688,7 +685,11 @@ static void handle_uart1_recv(uart1_dev_t *dev, char data)
     diff_us = diff.seconds * (1 * 1000 * 1000) + diff.microseconds;
 
     if (dev->state != STATE_IDLE && diff_us > (50 * 1000)) {
-        puts("UART timeouted.");
+        printf("! UART timeouted (cmd: 0x%02x, param_len: %d, data_len: %d)\n",
+               dev->cmd, dev->param_len, dev->data_len);
+        printf(" (param_idx: %d, data_idx: %d)\n",
+               dev->param_idx, dev->data_idx);
+
         _cleanup(dev);
     }
 
@@ -795,18 +796,19 @@ static void rf_receive_raw_cb(netdev_t *dev, void *buf, size_t len,
         /* ACK received */
         //puts("ACK received.");
         msg.type = MSG_ACK_RECEIVED;
+        msg.content.value = (uint32_t) frame.seq_nr;
         msg_send(&msg, uart1_rx_handler_pid);
     }
 }
 
 
-static void send_ack(uart1_dev_t *dev, char *buf, int buflen)
+static void __attribute__((unused)) send_ack(uart1_dev_t *dev, char *buf, int buflen)
 {
     ieee802154_frame_t frame;
     uint16_t pan_id;
     uint8_t addr[8];
 
-    ieee802154_frame_read(buf, &frame, buflen);
+    ieee802154_frame_read((uint8_t *) buf, &frame, buflen);
 
     pan_id = ml7396_get_pan();
     ml7396_get_address_long_buf(addr);
@@ -825,23 +827,24 @@ static void send_ack(uart1_dev_t *dev, char *buf, int buflen)
 static char transmit_buf[256];
 static int transmit_len;
 
-static void backoff(void)
-{
-
-
-}
-
 static int _transmit(uart1_dev_t *dev)
 {
-    int res, wait_ack, retry, i;
+    int res, wait_ack, retry, i, data_len, err_occured = 0;
     ieee802154_frame_t frame;
     msg_t msg;
     timex_t timeout;
 
-    memcpy(transmit_buf, dev->data, dev->data_len);
-    transmit_len = dev->data_len;
+    data_len = (int) dev->data_len;
+    if (data_len < 0 || data_len > 255) {
+        printf("%s: data_len err (%d)\n", __FUNCTION__, data_len);
+        return -1;
+    }
 
-    ieee802154_frame_read((uint8_t *) dev->data, &frame, dev->data_len);
+    memcpy(transmit_buf, dev->data, data_len);
+    transmit_len = data_len;
+
+    //ieee802154_frame_read((uint8_t *) dev->data, &frame, data_len);
+    ieee802154_frame_read((uint8_t *) transmit_buf, &frame, transmit_len);
 
     if (frame.fcf.ack_req == 1) {
         /* unicast frame */
@@ -854,21 +857,52 @@ static int _transmit(uart1_dev_t *dev)
     }
 
     for (i = 0; i < retry; i++) {
-        res = ml7396_send_raw(dev->data, dev->data_len);
+        uart1_rx_set(6);
+        //res = ml7396_send_raw((char *) dev->data, data_len);
+        res = ml7396_send_raw((char *) transmit_buf, transmit_len);
 
-        if (res == 0 && wait_ack == 1) {
-            timeout.seconds = 0;
-            timeout.microseconds = 5 * 1000; /* 5ms */
+        uart1_rx_set(7);
 
-            res = vtimer_msg_receive_timeout(&msg, timeout);
-            //printf("res=%d\n", res);
+        if (res == 0) {
+            if (wait_ack == 1) {
+                timeout.seconds = 0;
+                timeout.microseconds = 10 * 1000; /* 5ms + alpha */
 
-            if (res == 1) {
-                res = 0;
-                break;
+                uart1_rx_set(8);
+
+                res = vtimer_msg_receive_timeout(&msg, timeout);
+
+                if (res == 1) {
+                    uint8_t seq_nr = (uint8_t) (msg.content.value & 0xff);
+                    if (frame.seq_nr == seq_nr) {
+                        res = 0;
+
+                        if (err_occured == 1) {
+                            printf("%s: re-transmit[%d] OK, seq_nr = 0x%02x\n",
+                                   __FUNCTION__, i, frame.seq_nr);
+                        }
+                        break;
+                    }
+                    else {
+                        printf("%s: seq_nr mismatch, (send: 0x%02x, recv: 0x%02x)\n",
+                               __FUNCTION__, frame.seq_nr, seq_nr);
+                        err_occured = 1;
+                    }
+                }
+                else {
+                    printf("%s: ACK timeouted [%d / %d], seq_nr = 0x%02x\n",
+                           __FUNCTION__, i, retry, frame.seq_nr);
+                    err_occured = 1;
+                }
             }
         }
+        else {
+            printf("%s: send_raw[%d / %d] failed.\n",
+                   __FUNCTION__, i, retry);
+        }
     }
+
+    uart1_rx_set(9);
 
     if (res != 0) {
         printf("%s: timeouted...\n", __FUNCTION__);
@@ -883,23 +917,6 @@ static int _transmit(uart1_dev_t *dev)
             puts("");
     }
     puts("");
-#endif
-
-#if 0
-    diff.microseconds = end.microseconds - start.microseconds;
-
-    if (end.microseconds < start.microseconds) {
-        diff.microseconds = 1 * 1000 * 1000 + end.microseconds - start.microseconds;
-        diff.seconds = end.seconds - start.seconds - 1;
-    }
-    else {
-        diff.microseconds = end.microseconds - start.microseconds;
-        diff.seconds = end.seconds - start.seconds;
-    }
-
-    //mutex_unlock(&dev->cmd_mutex);
-    //printf("%s[%lu.%06lu]: ---> sent, %lu.%06lu\n", __FUNCTION__,
-    //end.seconds, end.microseconds, diff.seconds, diff.microseconds);
 #endif
 
     msgbuf_t *msgbuf;
@@ -917,7 +934,10 @@ static int _transmit(uart1_dev_t *dev)
     msg.type = MSG_SEND_REQ;
     msg.content.ptr = (char *) msgbuf;
 
+    uart1_rx_set(10);
     msg_send(&msg, uart1_tx_handler_pid);
+
+    uart1_rx_set(11);
 
     return res;
 }
@@ -950,7 +970,7 @@ static void *uart1_tx_thread(void *arg)
                 case MSG_RF_RECEIVED:
                     msgbuf = (msgbuf_t *) msg.content.ptr;
 
-                    send_ack(dev, &(msgbuf->buf[2]), msgbuf->len - 2);
+                    //send_ack(dev, &(msgbuf->buf[2]), msgbuf->len - 2);
 
                     /* maybe block */
                     send_uart2(dev, CMD_RECEIVE_BLK, msgbuf->buf, msgbuf->len);
@@ -965,6 +985,11 @@ static void *uart1_tx_thread(void *arg)
     return NULL;
 }
 
+void uart1_rx_set(int stat)
+{
+    vtimer_now(&last_stat_time);
+    uart_rx_thread_stat = stat;
+}
 
 /*
  * UART1: RX thread
@@ -978,17 +1003,23 @@ static void *uart1_rx_thread(void *arg)
     dev = (uart1_dev_t *) arg;
 
     uart_init(HOSTIF, HOSTIF_BAUDRATE, _rx_cb, _tx_cb, dev);
+    uart1_rx_set(1);
 
     while (1) {
         //printf("%s: wait msg forever...\n", __FUNCTION__);
+        uart1_rx_set(2);
         res = msg_receive(&msg);
+
+        uart1_rx_set(3);
 
         if (res == 1) {
             //printf("%s: message received\n", __FUNCTION__);
 
             switch (msg.type) {
                 case MSG_UART_RECEIVED:
+                    uart1_rx_set(4);
                     _transmit(dev);
+                    uart1_rx_set(5);
                     break;
 
                 default:
@@ -999,4 +1030,15 @@ static void *uart1_rx_thread(void *arg)
     }
 
     return NULL;
+}
+
+
+/* debug */
+int uart1_rx_debug(int argc, char **argv)
+{
+    printf("UART1_RX thread state: %d (@ %lu.%06lu)\n",
+           uart_rx_thread_stat,
+           last_stat_time.seconds, last_stat_time.microseconds);
+
+    return 0;
 }

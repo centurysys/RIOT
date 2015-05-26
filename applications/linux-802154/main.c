@@ -36,6 +36,7 @@ static shell_command_t commands[] = {
     { "regread", "ml7396 read register", cmd_ml7396_regread },
     { "cca", "do CCA", cmd_cca },
     { "fifowrite", "write to FIFO test", cmd_fifo_write },
+    { "uart1rx", "UART1 RX thread state", uart1_rx_debug },
     { NULL, NULL, NULL }
 };
 

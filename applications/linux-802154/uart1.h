@@ -20,5 +20,7 @@ enum uart1_msg_type_t {
 extern kernel_pid_t uart1_handler_pid;
 
 void uart1_thread_init(void);
+int uart1_rx_debug(int argc, char **argv);
+void uart1_rx_set(int stat);
 
 #endif
