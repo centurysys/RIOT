@@ -1,4 +1,3 @@
-target remote localhost:3333
 set remotetimeout 30
 set print pretty on
 
@@ -14,3 +13,5 @@ define reset_run
   monitor reset halt
   continue
 end
+
+target remote localhost:3333
