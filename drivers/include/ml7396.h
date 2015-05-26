@@ -146,7 +146,7 @@ void ml7396_switch_to_rx(void);
 
 void ml7396_switch_to_tx(void);
 
-void ml7396_switch_to_trx_off(void);
+int ml7396_switch_to_trx_off(void);
 
 /**
  * @brief Turns monitor (promiscuous) mode on or off.

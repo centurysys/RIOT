@@ -36,6 +36,8 @@ int16_t ml7396_send(ml7396_packet_t *packet)
     int16_t result;
     int retry, status;
 
+    ml7396_lock();
+
 #if 1
     /* CCA */
     for (retry = 0; retry < 3; retry++) {
@@ -50,21 +52,26 @@ int16_t ml7396_send(ml7396_packet_t *packet)
     }
 
     if (status != 0) {
-        return -1;
+        result = -1;
+        goto ret;
     }
 #endif
 
     result = ml7396_load(packet);
     if (result < 0) {
-        return result;
+        goto ret;
     }
 
     ml7396_transmit_tx_buf(&ml7396_netdev);
 
+ret:
+    ml7396_unlock();
     return result;
 }
 
 extern void uart1_rx_set(int stat);
+
+static int send_ack_req = 0;
 
 int16_t ml7396_send_raw(char *buf, int len)
 {
@@ -83,6 +90,9 @@ int16_t ml7396_send_raw(char *buf, int len)
         retry = 1;
     }
 
+retry:
+    result = 0;
+
     /* CCA */
     for (i = 0; i < retry; i++) {
         random_read((char *) &rand, 1);
@@ -94,42 +104,46 @@ int16_t ml7396_send_raw(char *buf, int len)
 
         uart1_rx_set(102);
 
+        /* --- Begin ML7396 critical section --- */
+        ml7396_lock();
+
         status = ml7396_channel_is_clear(&ml7396_netdev);
 
         uart1_rx_set(103);
 
         if (status == 0) {
-            //printf("%d: rand: %d, backoff = %lu\n", i, (int) rand, backoff);
-            break;
+            uart1_rx_set(104);
+
+            result = ml7396_load_raw(buf, len);
+
+            if (result > 0) {
+                break;
+            }
         }
+        else if (send_ack_req == 1) {
+            send_ack_req = 0;
+            ml7396_unlock();
+            printf("%s: received in CCA[%d], retry.\n", __FUNCTION__, i);
+            goto retry;
+        }
+
+        ml7396_unlock();
     }
 
-    uart1_rx_set(104);
+    if (result > 0) {
+        uart1_rx_set(106);
 
-    if (status != 0) {
-        return -1;
+        ml7396_transmit_tx_buf(&ml7396_netdev);
+        result = 0;
+
+        uart1_rx_set(107);
+
+        /* --- End ML7396 critical section --- */
+        ml7396_unlock();
     }
 
-    uart1_rx_set(105);
-
-    ml7396_lock();
-
-    uart1_rx_set(106);
-
-    result = ml7396_load_raw(buf, len);
-    if (result < 0) {
-        goto ret;
-    }
-
-    uart1_rx_set(107);
-
-    ml7396_transmit_tx_buf(&ml7396_netdev);
-    result = 0;
-
-ret:
     uart1_rx_set(108);
-    ml7396_unlock();
-    uart1_rx_set(109);
+
     return result;
 }
 
@@ -141,9 +155,19 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     int16_t result;
     uint32_t status;
 
-    ml7396_switch_to_trx_off();
+    send_ack_req = 1;
+
+    /* --- BEGIN ML7396 critical section --- */
+    ml7396_lock();
+
+    if (ml7396_switch_to_trx_off() != 0) {
+        printf("%s: TRX_OFF timeouted...\n", __FUNCTION__);
+        result = -1;
+        goto ret;
+    }
 
     memset(&packet, 0, sizeof(ml7396_packet_t));
+    //printf("%s: ACK seq_nr = 0x%02x\n", __FUNCTION__, frame->seq_nr);
 
     packet.frame.seq_nr = frame->seq_nr;
     packet.frame.src_pan_id = ml7396_get_pan();
@@ -171,24 +195,15 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
 
     /* calculate size of the frame (payload) */
     packet.length = ieee802154_frame_get_hdr_len(&packet.frame) + 2;
-    //printf("packet.length = %d\n", packet.length);
 
     if (packet.length > (ML7396_MAX_PKT_LENGTH)) {
-        return -1;
+        printf("%s: packet length(%d) too long.\n",
+               __FUNCTION__, packet.length);
+        result = -1;
+        goto ret;
     }
 
     ml7396_gen_pkt(pkt, &packet);
-
-#if 0
-    for (i = 0; i < packet.length + 2 + 2; i++) {
-        printf(" %02x", pkt[i]);
-        if ((i % 16) == 15)
-            puts("");
-    }
-    puts("");
-#endif
-
-    ml7396_lock();
 
     reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
     if (reg & (PD_DATA_REQ1 | PD_DATA_REQ0)) {
@@ -218,6 +233,10 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
         result = -1;
     }
 
+ret:
+    send_ack_req = 0;
+
+    /* --- End ML7396 critical section --- */
     ml7396_unlock();
     return result;
 }
@@ -345,7 +364,10 @@ static int16_t ml7396_load_raw(char *buf, int len)
         return -1;
     }
 
-    ml7396_switch_to_trx_off();
+    if (ml7396_switch_to_trx_off() != 0) {
+        printf("%s: TRX_OFF timeouted...\n", __FUNCTION__);
+        return -1;
+    }
 
     memset(pkt, 0, 256 + 2);
 
@@ -357,27 +379,18 @@ static int16_t ml7396_load_raw(char *buf, int len)
     ml7396_fifo_write((uint8_t *) pkt, len + 2);
 
     done = 0;
-    for (i = 0; i < 100; i++) {
+    for (i = 0; i < 10; i++) {
         status = ml7396_get_interrupt_status();
 
         if (status & (INT_TXFIFO0_REQ | INT_TXFIFO1_REQ)) {
             done = 1;
             break;
         }
+
+        usleep(100);
     }
 
-    if (done == 1) {
-#if 0
-        //dprintf(" ---> TX-FIFO request accepted.\n");
-        for (i = 0; i < len + 2; i++) {
-            printf(" %02x", pkt[i]);
-            if ((i % 16) == 15)
-                puts("");
-        }
-        puts("");
-#endif
-    }
-    else {
+    if (done != 1) {
         printf("%s: TX-FIFO timeouted...\n", __FUNCTION__);
         return -1;
     }

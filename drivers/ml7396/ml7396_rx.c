@@ -57,6 +57,24 @@ static inline void _ml7396_clear_rx_interrupts(int page, int clear_fifo)
     }
 }
 
+static void _send_ack(ieee802154_frame_t *frame)
+{
+    uint16_t pan_id;
+    uint8_t addr[8];
+
+    pan_id = ml7396_get_pan();
+    ml7396_get_address_long_buf(addr);
+
+    if ((frame->fcf.ack_req == 1) &&
+        (pan_id == frame->dest_pan_id) &&
+        (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
+        memcmp(frame->dest_addr, addr, 8) == 0) {
+        ml7396_send_ack(frame, /* enhanced = */ 1);
+
+        //printf("%s: send ACK\n", __FUNCTION__);
+    }
+}
+
 int ml7396_rx_handler(uint32_t status)
 {
     int phr_len, page, complete, crc_ok, clear_fifo;
@@ -116,6 +134,9 @@ int ml7396_rx_handler(uint32_t status)
         goto ret;
     }
 
+    /* --- Begin ML7396 FIFO critical section --- */
+    ml7396_lock();
+
     /* read PHR (2-octets) */
     ml7396_fifo_read((uint8_t *) &tmp, 2);
 
@@ -125,12 +146,18 @@ int ml7396_rx_handler(uint32_t status)
         printf("%s: ??? phr_len = %d, intstat = 0x%08x, page = %d\n",
                __FUNCTION__, phr_len, (unsigned int) status, page);
         clear_fifo = 1;
+
+        ml7396_unlock();
+
         goto ret;
     }
 
     /* read psdu */
     buf = buffer[rx_buffer_next];
     ml7396_fifo_read(buf, phr_len + 2 + 1);
+
+    /* --- End ML7396 FIFO critical section --- */
+    ml7396_unlock();
 
     /* set length, ED */
     ml7396_rx_buffer[rx_buffer_next].length = phr_len;
@@ -140,10 +167,6 @@ int ml7396_rx_handler(uint32_t status)
     crc_received = buf[phr_len] | buf[phr_len + 1] << 8;
 
     if (crc == crc_received) {
-#if 0
-        printf("CRC OK, received: %02x %02x, calc: %04x, status: 0x%08x, len: %d\n",
-               buf[phr_len], buf[phr_len+1], crc, status, phr_len);
-#endif
         crc_ok = 1;
     }
     else {
@@ -177,6 +200,8 @@ int ml7396_rx_handler(uint32_t status)
 
     /* if packet is no ACK */
     if (ml7396_rx_buffer[rx_buffer_next].frame.fcf.frame_type != IEEE_802154_ACK_FRAME) {
+        _send_ack(frame);
+
         if (ml7396_raw_packet_cb != NULL) {
             fcs_rssi = 0;
             lqi = 0;
@@ -202,7 +227,6 @@ int ml7396_rx_handler(uint32_t status)
         if ((pan_id == frame->dest_pan_id) &&
             (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
             memcmp(frame->dest_addr, addr, 8) == 0) {
-
             if (ml7396_raw_packet_cb != NULL) {
                 fcs_rssi = 0;
                 lqi = 0;
@@ -217,12 +241,12 @@ int ml7396_rx_handler(uint32_t status)
         }
     }
 
+ret:
     /* shift to next buffer element */
     if (++rx_buffer_next == ML7396_RX_BUF_SIZE) {
         rx_buffer_next = 0;
     }
 
-ret:
     /* clear interrupts */
     _ml7396_clear_rx_interrupts(page, clear_fifo);
 

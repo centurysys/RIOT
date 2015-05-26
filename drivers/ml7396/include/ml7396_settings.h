@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define ML7396_RX_BUF_SIZE   3
+#define ML7396_RX_BUF_SIZE   4
 
 enum ml7396_msg_type_t {
     MSG_ML7396_IRQ,

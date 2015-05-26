@@ -35,6 +35,7 @@
 #include "transceiver.h"
 #include "hwtimer.h"
 #include "mutex.h"
+#include "ringbuffer.h"
 #include "config.h"
 
 //#define DEBUG
@@ -90,10 +91,9 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
 {
     int i, res = -EBUSY;
     struct wait_interrupt *wait = NULL;
-    //unsigned irqstate;
+    unsigned irqstate;
 
-    //irqstate = disableIRQ();
-    ml7396_disableIRQ();
+    irqstate = disableIRQ();
 
     for (i = 0; i < INT_WAIT; i++) {
         if (!int_waits[i].int_wait) {
@@ -102,20 +102,18 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
     }
 
     if (!wait) {
-        ml7396_enableIRQ();
-        return res;
+        goto ret;
     }
 
     wait->int_wait = interrupts;
     wait->clear = clear;
     wait->mutex = mutex;
 
-    //restoreIRQ(irqstate);
-    ml7396_enableIRQ();
+    restoreIRQ(irqstate);
 
     mutex_lock(mutex);
 
-    //irqstate = disableIRQ();
+    irqstate = disableIRQ();
 
     if (wait->clear)
         ml7396_clear_interrupts(interrupts);
@@ -126,8 +124,8 @@ int ml7396_wait_interrupt(uint32_t interrupts, int clear, mutex_t *mutex)
 
     res = 0;
 
-    //restoreIRQ(irqstate);
-
+ret:
+    restoreIRQ(irqstate);
     return res;
 }
 
@@ -135,6 +133,9 @@ int ml7396_wakeup_interrupt(uint32_t interrupt)
 {
     int i, cnt = 0;
     struct wait_interrupt *wait = NULL;
+    unsigned irqstate;
+
+    irqstate = disableIRQ();
 
     for (i = 0; i < INT_WAIT; i++) {
         wait = &int_waits[i];
@@ -145,6 +146,7 @@ int ml7396_wakeup_interrupt(uint32_t interrupt)
         }
     }
 
+    restoreIRQ(irqstate);
     return cnt;
 }
 
@@ -155,7 +157,7 @@ int ml7396_initialize(netdev_t *dev)
     if (ml7396_irq_thread_pid == KERNEL_PID_UNDEF) {
         pid = thread_create(ml7396_irq_thread_stack,
                             sizeof(ml7396_irq_thread_stack),
-                            3,
+                            1,
                             CREATE_STACKTEST | CREATE_SLEEPING,
                             ml7396_irq_thread,
                             NULL,
@@ -483,12 +485,16 @@ static void ml7396_irq_bh(void)
         }
     }
 
-    /* wakeup thread */
-    ml7396_wakeup_interrupt(status);
-
     if (status & enable) {
+        /* wakeup thread */
+        ml7396_wakeup_interrupt(status);
+
         enable &= ~status;
     }
+
+    enable |= (INT_RXFIFO1_CRCERR | INT_RXFIFO0_CRCERR |
+               INT_RXFIFO1_DONE | INT_RXFIFO0_DONE |
+               INT_RXFIFO_ERR);
 
     /* re-enable interrupt */
     ml7396_set_interrupt_mask(ML7396_INT_ALL);
@@ -854,8 +860,9 @@ static void __attribute__((unused)) _ml7396_wait_rf_stat(uint8_t stat, const cha
         if ((reg & 0xf0) == stat) {
             break;
         }
-#if 0
+#if 1
         else {
+            ml7396_clear_interrupts(INT_RFSTAT_CHANGE);
             ml7396_set_interrupt_enable(INT_RFSTAT_CHANGE);
             ml7396_wait_interrupt(INT_RFSTAT_CHANGE, 0, &ml7396_mutex);
         }
@@ -879,11 +886,26 @@ void ml7396_switch_to_tx(void)
     //_ml7396_wait_rf_stat(STAT_TX_ON, __FUNCTION__);
 }
 
-void ml7396_switch_to_trx_off(void)
+int ml7396_switch_to_trx_off(void)
 {
-    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_FORCE_TRX_OFF);
+    int i, res;
+    volatile uint8_t reg;
 
-    _ml7396_wait_rf_stat(STAT_TRX_OFF, __FUNCTION__);
+    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TRX_OFF);
+    //_ml7396_wait_rf_stat(STAT_TRX_OFF, __FUNCTION__);
+
+    res = -1;
+    for (i = 0; i < 10; i++) {
+        reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+
+        if ((reg & 0xf0) == STAT_TRX_OFF) {
+            res = 0;
+            break;
+        }
+        usleep(1 * 1000);
+    }
+
+    return res;
 }
 
 /*
@@ -893,9 +915,13 @@ static void *ml7396_irq_thread(void *arg)
 {
     int res;
     msg_t msg;
+    timex_t timeout;
 
     while (1) {
-        res = msg_receive(&msg);
+        timeout.seconds = 2;
+        timeout.microseconds = 0;
+
+        res = vtimer_msg_receive_timeout(&msg, timeout);
 
         if (res == 1) {
             switch (msg.type) {
@@ -906,6 +932,10 @@ static void *ml7396_irq_thread(void *arg)
                 default:
                     break;
             }
+        }
+        else {
+            /* polling */
+            ml7396_irq_bh();
         }
     }
 
