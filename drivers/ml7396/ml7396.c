@@ -848,14 +848,12 @@ void ml7396_unlock(void)
 }
 
 
-static void __attribute__((unused)) _ml7396_wait_rf_stat(uint8_t stat, const char *func)
+static void __attribute__((unused)) _ml7396_wait_rf_stat(uint8_t stat)
 {
     volatile uint8_t reg;
 
     while (1) {
         reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
-        /*printf("# %s: RF_STATUS = 0x%02x, (wait: 0x%02x) (%s)\n",
-          __FUNCTION__, reg, stat, func);*/
 
         if ((reg & 0xf0) == stat) {
             break;
@@ -868,37 +866,23 @@ static void __attribute__((unused)) _ml7396_wait_rf_stat(uint8_t stat, const cha
         }
 #endif
     }
-
-    //printf("%s: done. (%s)\n", __FUNCTION__, func);
 }
 
-void ml7396_switch_to_rx(void)
-{
-    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_RX_ON);
-
-    //_ml7396_wait_rf_stat(STAT_RX_ON, __FUNCTION__);
-}
-
-void ml7396_switch_to_tx(void)
-{
-    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TX_ON);
-
-    //_ml7396_wait_rf_stat(STAT_TX_ON, __FUNCTION__);
-}
-
-int ml7396_switch_to_trx_off(void)
+static int __attribute__((unused)) _ml7396_wait_rf_stat_poll(uint8_t stat)
 {
     int i, res;
     volatile uint8_t reg;
-
-    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TRX_OFF);
-    //_ml7396_wait_rf_stat(STAT_TRX_OFF, __FUNCTION__);
+    volatile uint32_t status;
 
     res = -1;
     for (i = 0; i < 10; i++) {
         reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+        status = ml7396_get_interrupt_status();
 
-        if ((reg & 0xf0) == STAT_TRX_OFF) {
+        if ((status & INT_RFSTAT_CHANGE) &&
+            ((reg & 0xf0) == stat)) {
+            ml7396_clear_interrupts(INT_RFSTAT_CHANGE);
+
             res = 0;
             break;
         }
@@ -906,6 +890,51 @@ int ml7396_switch_to_trx_off(void)
     }
 
     return res;
+}
+
+int ml7396_switch_to_rx(void)
+{
+    uint8_t reg;
+
+    reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+    if (reg & STAT_RX_ON) {
+        return 0;
+    }
+
+    ml7396_clear_interrupts(INT_RFSTAT_CHANGE);
+    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_RX_ON);
+
+    return _ml7396_wait_rf_stat_poll(STAT_RX_ON);
+}
+
+int ml7396_switch_to_tx(void)
+{
+    uint8_t reg;
+
+    reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+    if (reg & STAT_TX_ON) {
+        return 0;
+    }
+
+    ml7396_clear_interrupts(INT_RFSTAT_CHANGE);
+    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TX_ON);
+
+    return _ml7396_wait_rf_stat_poll(STAT_TX_ON);
+}
+
+int ml7396_switch_to_trx_off(void)
+{
+    uint8_t reg;
+
+    reg = ml7396_reg_read(ML7396_REG_RF_STATUS);
+    if (reg & STAT_TRX_OFF) {
+        return 0;
+    }
+
+    ml7396_clear_interrupts(INT_RFSTAT_CHANGE);
+    ml7396_reg_write(ML7396_REG_RF_STATUS, SET_TRX_OFF);
+
+    return _ml7396_wait_rf_stat_poll(STAT_TRX_OFF);
 }
 
 /*

@@ -22,6 +22,8 @@ static inline void _ml7396_clear_rx_interrupts(int page, int clear_fifo)
 {
     uint32_t interrupts = 0, status;
 
+    interrupts = INT_SFD_DETECT | INT_RFSTAT_CHANGE;
+
     status = ml7396_get_interrupt_status();
 
     if (status & INT_RXFIFO_ERR) {
@@ -49,7 +51,7 @@ static inline void _ml7396_clear_rx_interrupts(int page, int clear_fifo)
     }
 
     ml7396_clear_interrupts(interrupts);
-    //ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0x00);
+    ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0x00);
 
     if (clear_fifo == 1) {
         status = ml7396_get_interrupt_status();
@@ -75,12 +77,14 @@ static void _send_ack(ieee802154_frame_t *frame)
     }
 }
 
+extern void dump_buffer(const char *buf, int buflen);
+
 int ml7396_rx_handler(uint32_t status)
 {
     int phr_len, page, complete, crc_ok, clear_fifo;
     int int_pend[2] = {0, 0};
     uint8_t *buf, lqi, fcs_rssi;
-    uint16_t tmp, crc, crc_received;
+    uint16_t phy_header, crc, crc_received;
     static int last_page = -1;
 
     clear_fifo = 0;
@@ -94,6 +98,7 @@ int ml7396_rx_handler(uint32_t status)
     }
 
     if ((int_pend[0] == 1) && (int_pend[1] == 1)) {
+        printf("%s: Pending page 0 and 1.\n", __FUNCTION__);
         if ((last_page == -1) || (last_page == 1)) {
             page = 0;
         }
@@ -138,9 +143,9 @@ int ml7396_rx_handler(uint32_t status)
     ml7396_lock();
 
     /* read PHR (2-octets) */
-    ml7396_fifo_read((uint8_t *) &tmp, 2);
+    ml7396_fifo_read((uint8_t *) &phy_header, 2);
 
-    phr_len = (int) (NTOHS(tmp) & 0xff) - 2;
+    phr_len = (int) (NTOHS(phy_header) & 0xff) - 2;
 
     if (phr_len < 10) {
         printf("%s: ??? phr_len = %d, intstat = 0x%08x, page = %d\n",
@@ -154,14 +159,15 @@ int ml7396_rx_handler(uint32_t status)
 
     /* read psdu */
     buf = buffer[rx_buffer_next];
+    memset(buf, 0, ML7396_RX_BUF_SIZE);
     ml7396_fifo_read(buf, phr_len + 2 + 1);
 
     /* --- End ML7396 FIFO critical section --- */
-    ml7396_unlock();
+    //ml7396_unlock();
 
     /* set length, ED */
     ml7396_rx_buffer[rx_buffer_next].length = phr_len;
-    ml7396_rx_buffer[rx_buffer_next].ed = buf[phr_len + 2 + 1];
+    ml7396_rx_buffer[rx_buffer_next].ed = buf[phr_len + 2];
 
     crc = crc_ccitt(0, buf, phr_len);
     crc_received = buf[phr_len] | buf[phr_len + 1] << 8;
@@ -170,13 +176,19 @@ int ml7396_rx_handler(uint32_t status)
         crc_ok = 1;
     }
     else {
-        printf("! [%d] CRC(received) %02x%02x, calc: %04x, status: 0x%08x, len: %d\n",
-               page, buf[phr_len+1], buf[phr_len], crc, (unsigned int) status, phr_len);
+        printf("! [%d] CRC(received) %02x%02x, calc: %04x, "
+               "status: 0x%08x, len: %d (0x%02x)\n",
+               page, buf[phr_len+1], buf[phr_len], crc,
+               (unsigned int) status, phr_len, phr_len);
+        printf(" PHY header: %04x\n", phy_header);
         crc_ok = 0;
+
+        dump_buffer((char *) buf, phr_len + 2);
     }
 
     if (crc_ok == 0) {
         clear_fifo = 1;
+        ml7396_unlock();
         goto ret;
     }
 
@@ -199,8 +211,11 @@ int ml7396_rx_handler(uint32_t status)
     ml7396_get_address_long_buf(addr);
 
     /* if packet is no ACK */
-    if (ml7396_rx_buffer[rx_buffer_next].frame.fcf.frame_type != IEEE_802154_ACK_FRAME) {
+    //if (ml7396_rx_buffer[rx_buffer_next].frame.fcf.frame_type != IEEE_802154_ACK_FRAME) {
+    if (frame->fcf.frame_type != IEEE_802154_ACK_FRAME) {
         _send_ack(frame);
+
+        ml7396_unlock();
 
         if (ml7396_raw_packet_cb != NULL) {
             fcs_rssi = 0;
@@ -223,6 +238,8 @@ int ml7396_rx_handler(uint32_t status)
 #endif
     }
     else {
+        ml7396_unlock();
+
         //puts("IEEE_802154_ACK_FRAME");
         if ((pan_id == frame->dest_pan_id) &&
             (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&

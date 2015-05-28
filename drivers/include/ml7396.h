@@ -142,9 +142,9 @@ int ml7396_is_on(void);
 /**
  * @brief Switches the ml7396 into receive mode.
  */
-void ml7396_switch_to_rx(void);
+int ml7396_switch_to_rx(void);
 
-void ml7396_switch_to_tx(void);
+int ml7396_switch_to_tx(void);
 
 int ml7396_switch_to_trx_off(void);
 

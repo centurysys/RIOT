@@ -4,6 +4,7 @@
 
 #include "periph/random.h"
 
+#include "thread.h"
 #include "mutex.h"
 #include "ieee802154_frame.h"
 
@@ -27,6 +28,7 @@ static uint8_t sequence_nr;
 
 /* FCS is added in hardware */
 static uint8_t pkt[256 + 2];
+static uint8_t pkt_ack[256 + 2];
 
 static ml7396_packet_t ml7396_tx_packet;
 
@@ -69,7 +71,7 @@ ret:
     return result;
 }
 
-extern void uart1_rx_set(int stat);
+extern void uart1_rx_set(int stat, unsigned long arg);
 
 static int send_ack_req = 0;
 
@@ -98,51 +100,60 @@ retry:
         random_read((char *) &rand, 1);
         backoff = aUnitBackoffPeriod * rand; /* usecs */
 
-        uart1_rx_set(101);
+        uart1_rx_set(101, backoff);
 
-        usleep(backoff);
+        if (backoff > 10) {
+            usleep(backoff);
+        }
 
-        uart1_rx_set(102);
+        uart1_rx_set(102, backoff);
 
-        /* --- Begin ML7396 critical section --- */
         ml7396_lock();
 
         status = ml7396_channel_is_clear(&ml7396_netdev);
 
-        uart1_rx_set(103);
+        ml7396_unlock();
 
-        if (status == 0) {
-            uart1_rx_set(104);
+        uart1_rx_set(103, backoff);
+
+        if (send_ack_req == 1) {
+            send_ack_req = 0;
+            //ml7396_unlock();
+            printf("%s: received in CCA[%d], retry.\n", __FUNCTION__, i);
+            goto retry;
+        }
+        else if (status == 0) {
+            /* --- Begin ML7396 critical section --- */
+            ml7396_lock();
+
+            uart1_rx_set(104, backoff);
 
             result = ml7396_load_raw(buf, len);
 
             if (result > 0) {
                 break;
             }
-        }
-        else if (send_ack_req == 1) {
-            send_ack_req = 0;
-            ml7396_unlock();
-            printf("%s: received in CCA[%d], retry.\n", __FUNCTION__, i);
-            goto retry;
+            else {
+                ml7396_unlock();
+            }
         }
 
-        ml7396_unlock();
+        //ml7396_unlock();
     }
 
     if (result > 0) {
-        uart1_rx_set(106);
+        uart1_rx_set(105, result);
 
         ml7396_transmit_tx_buf(&ml7396_netdev);
         result = 0;
 
-        uart1_rx_set(107);
+        uart1_rx_set(106, result);
 
         /* --- End ML7396 critical section --- */
         ml7396_unlock();
     }
 
-    uart1_rx_set(108);
+    uart1_rx_set(107, result);
 
     return result;
 }
@@ -158,9 +169,10 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     send_ack_req = 1;
 
     /* --- BEGIN ML7396 critical section --- */
-    ml7396_lock();
+    //ml7396_lock();
 
-    if (ml7396_switch_to_trx_off() != 0) {
+    //if (ml7396_switch_to_trx_off() != 0) {
+    if (ml7396_switch_to_tx() != 0) {
         printf("%s: TRX_OFF timeouted...\n", __FUNCTION__);
         result = -1;
         goto ret;
@@ -203,7 +215,8 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
         goto ret;
     }
 
-    ml7396_gen_pkt(pkt, &packet);
+    memset(pkt_ack, 0, sizeof(pkt_ack));
+    ml7396_gen_pkt(pkt_ack, &packet);
 
     reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
     if (reg & (PD_DATA_REQ1 | PD_DATA_REQ0)) {
@@ -212,7 +225,7 @@ int16_t ml7396_send_ack(ieee802154_frame_t *frame, int enhanced)
     }
 
     ml7396_set_interrupt_enable(INT_TXFIFO0_REQ | INT_TXFIFO1_REQ);
-    ml7396_fifo_write(pkt, packet.length + 4);
+    ml7396_fifo_write(pkt_ack, packet.length + 4);
 
     done = 0;
     for (i = 0; i < 100; i++) {
@@ -237,21 +250,28 @@ ret:
     send_ack_req = 0;
 
     /* --- End ML7396 critical section --- */
-    ml7396_unlock();
+    //ml7396_unlock();
     return result;
 }
 
 netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev)
 {
     uint32_t status;
+    uint8_t reg;
 
     ml7396_switch_to_tx();
 
     while (1) {
         status = ml7396_get_interrupt_status();
+        reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
 
-        if (status & (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE))
+        if ((status & (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE)) &&
+            (reg & (PD_DATA_CFM0 | PD_DATA_CFM1))) {
             break;
+        }
+        else {
+            usleep(10);
+        }
     }
 
     status = ml7396_get_interrupt_status();
@@ -260,8 +280,9 @@ netdev_802154_tx_status_t ml7396_transmit_tx_buf(netdev_t *dev)
                INT_RFSTAT_CHANGE);
 
     ml7396_clear_interrupts(status);
+    ml7396_reg_write(ML7396_REG_INT_PD_DATA_REQ, 0x00);
 
-    status = ml7396_get_interrupt_status();
+    //status = ml7396_get_interrupt_status();
 
     ml7396_switch_to_rx();
 
@@ -356,17 +377,61 @@ static int16_t ml7396_load(ml7396_packet_t *packet)
 
 static int16_t ml7396_load_raw(char *buf, int len)
 {
-    int i, done;
-    uint32_t status;
+    int i, done, yield = 0;
+    uint32_t status, enable;
+    uint8_t reg;
 
     if (len < 0 || len > 255) {
         printf("! %s: length err (%d)\n", __FUNCTION__, len);
         return -1;
     }
 
-    if (ml7396_switch_to_trx_off() != 0) {
-        printf("%s: TRX_OFF timeouted...\n", __FUNCTION__);
+    for (i = 0; i < 3; i++) {
+        status = ml7396_get_interrupt_status();
+        reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_IND);
+
+        if ((status & INT_SFD_DETECT) || (reg != 0)) {
+            yield = 1;
+        }
+        else {
+            yield = 0;
+        }
+
+        if ((yield == 1) || i > 0) {
+            enable = ml7396_get_interrupt_enable();
+            printf("%s: [%d] enable: 0x%08x, status: 0x%08x (valid: 0x%08x),"
+                   " PD_DATA_IND: 0x%02x\n",
+                   __FUNCTION__, i, (unsigned int) enable,
+                   (unsigned int) status, (unsigned int) (enable & status), reg);
+        }
+
+        if (yield == 1) {
+            ml7396_unlock();
+            /* re-enable interrupt */
+            ml7396_set_interrupt_mask(ML7396_INT_ALL);
+            ml7396_set_interrupt_enable(enable);
+
+            usleep(50 * 1000);
+            thread_yield();
+            //ml7396_reg_write(ML7396_REG_INT_PD_DATA_IND, 0);
+
+            ml7396_lock();
+        }
+        else {
+            break;
+        }
+    }
+
+    //if (ml7396_switch_to_trx_off() != 0) {
+    if (ml7396_switch_to_tx() != 0) {
+        printf("%s: RX -> TX timeouted...\n", __FUNCTION__);
         return -1;
+    }
+
+    reg = ml7396_reg_read(ML7396_REG_INT_PD_DATA_REQ);
+    if (reg != 0) {
+        printf("%s: PD_DATA_REQ: 0x%02x\n", __FUNCTION__, reg);
+        ml7396_reg_write(ML7396_REG_INT_PD_DATA_REQ, 0);
     }
 
     memset(pkt, 0, 256 + 2);
@@ -387,7 +452,7 @@ static int16_t ml7396_load_raw(char *buf, int len)
             break;
         }
 
-        usleep(100);
+        usleep(10);
     }
 
     if (done != 1) {
@@ -399,7 +464,7 @@ static int16_t ml7396_load_raw(char *buf, int len)
 }
 
 /**
- * @brief Static function to generate byte array from at86rf231 packet.
+ * @brief Static function to generate byte array from ML7396 packet.
  */
 static void ml7396_gen_pkt(uint8_t *buf, ml7396_packet_t *packet)
 {
