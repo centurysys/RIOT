@@ -91,6 +91,10 @@
 #include "net/ng_ipv6.h"
 #endif
 
+#ifdef MODULE_NG_IPV6_NETIF
+#include "net/ng_ipv6/netif.h"
+#endif
+
 #ifdef MODULE_L2_PING
 #include "l2_ping.h"
 #endif
@@ -101,6 +105,11 @@
 
 #ifdef MODULE_NG_UDP
 #include "net/ng_udp.h"
+#endif
+
+#ifdef MODULE_DEV_ETH_AUTOINIT
+#include "net/dev_eth.h"
+#include "dev_eth_autoinit.h"
 #endif
 
 #define ENABLE_DEBUG (0)
@@ -327,4 +336,8 @@ void auto_init(void)
 #endif
 
 #endif /* MODULE_AUTO_INIT_NG_NETIF */
+
+#ifdef MODULE_NG_IPV6_NETIF
+    ng_ipv6_netif_init_by_dev();
+#endif
 }

@@ -74,6 +74,12 @@ endif
 ifneq (,$(filter ng_ipv6_addr,$(USEMODULE)))
     DIRS += net/network_layer/ng_ipv6/addr
 endif
+ifneq (,$(filter ng_ipv6_ext,$(USEMODULE)))
+    DIRS += net/network_layer/ng_ipv6/ext
+endif
+ifneq (,$(filter ng_ipv6_ext_rh,$(USEMODULE)))
+    DIRS += net/network_layer/ng_ipv6/ext/rh
+endif
 ifneq (,$(filter ng_ipv6_hdr,$(USEMODULE)))
     DIRS += net/network_layer/ng_ipv6/hdr
 endif
@@ -107,6 +113,9 @@ endif
 ifneq (,$(filter ng_pktbuf,$(USEMODULE)))
     DIRS += net/crosslayer/ng_pktbuf
 endif
+ifneq (,$(filter ng_rpl_srh,$(USEMODULE)))
+    DIRS += net/routing/ng_rpl/srh
+endif
 ifneq (,$(filter ng_sixlowpan,$(USEMODULE)))
     DIRS += net/network_layer/ng_sixlowpan
 endif
@@ -115,6 +124,9 @@ ifneq (,$(filter ng_sixlowpan_ctx,$(USEMODULE)))
 endif
 ifneq (,$(filter ng_sixlowpan_frag,$(USEMODULE)))
     DIRS += net/network_layer/ng_sixlowpan/frag
+endif
+ifneq (,$(filter ng_sixlowpan_iphc,$(USEMODULE)))
+    DIRS += net/network_layer/ng_sixlowpan/iphc
 endif
 ifneq (,$(filter ng_sixlowpan_netif,$(USEMODULE)))
     DIRS += net/network_layer/ng_sixlowpan/netif
@@ -151,6 +163,9 @@ ifneq (,$(filter log_%,$(USEMODULE)))
 endif
 ifneq (,$(filter cpp11-compat,$(USEMODULE)))
     DIRS += cpp11-compat
+endif
+ifneq (,$(filter ng_netdev_eth,$(USEMODULE)))
+    DIRS += net/link_layer/ng_netdev_eth
 endif
 
 DIRS += $(dir $(wildcard $(addsuffix /Makefile, ${USEMODULE})))
