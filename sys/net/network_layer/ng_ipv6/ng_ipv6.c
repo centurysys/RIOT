@@ -16,7 +16,7 @@
 #include <stdbool.h>
 
 #include "byteorder.h"
-#include "cpu-conf.h"
+#include "cpu_conf.h"
 #include "kernel_types.h"
 #include "net/ng_icmpv6.h"
 #include "net/ng_netbase.h"
@@ -35,7 +35,11 @@
 
 #define _MAX_L2_ADDR_LEN    (8U)
 
+#if ENABLE_DEBUG
+static char _stack[NG_IPV6_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
+#else
 static char _stack[NG_IPV6_STACK_SIZE];
+#endif
 
 #if ENABLE_DEBUG
 static char addr_str[NG_IPV6_ADDR_MAX_STR_LEN];
