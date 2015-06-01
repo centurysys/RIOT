@@ -1,3 +1,6 @@
-export CORTEX = cortex-m3
+export CPU_ARCH = cortex-m3
 
-include $(RIOTCPU)/Makefile.include.cortex_common
+# use hwtimer compatibility module
+USEMODULE += hwtimer_compat
+
+include $(RIOTCPU)/Makefile.include.cortexm_common
