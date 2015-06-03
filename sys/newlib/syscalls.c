@@ -59,6 +59,12 @@ static char rx_buf_mem[STDIO_RX_BUFSIZE];
 static ringbuffer_t rx_buf;
 #endif
 
+#ifndef STDIO_TX_BUFSIZE
+#define STDIO_TX_BUFSIZE 4096
+#endif
+static char tx_buf_mem[STDIO_TX_BUFSIZE];
+static ringbuffer_t tx_buf;
+
 /**
  * @brief Receive a new character from the UART and put it into the receive buffer
  */
@@ -78,6 +84,27 @@ void rx_cb(void *arg, char data)
 #endif
 }
 
+static int tx_cb(void *arg)
+{
+    int ret;
+    char ch;
+    unsigned int intstat;
+
+    intstat = disableIRQ();
+
+    ret = ringbuffer_get_one(&tx_buf);
+    if (ret == -1) {
+        restoreIRQ(intstat);
+        return 0;
+    }
+
+    ch = (char) (ret & 0xff);
+    uart_write(STDIO, ch);
+
+    restoreIRQ(intstat);
+    return 1;
+}
+
 /**
  * @brief Initialize NewLib, called by __libc_init_array() from the startup script
  */
@@ -87,7 +114,9 @@ void _init(void)
     mutex_init(&uart_rx_mutex);
     ringbuffer_init(&rx_buf, rx_buf_mem, STDIO_RX_BUFSIZE);
 #endif
-    uart_init(STDIO, STDIO_BAUDRATE, rx_cb, 0, 0);
+    //uart_init(STDIO, STDIO_BAUDRATE, rx_cb, 0, 0);
+    ringbuffer_init(&tx_buf, tx_buf_mem, STDIO_TX_BUFSIZE);
+    uart_init(STDIO, STDIO_BAUDRATE, rx_cb, tx_cb, 0);
 }
 
 /**
@@ -233,15 +262,40 @@ int _read_r(struct _reent *r, int fd, void *buffer, unsigned int count)
  */
 int _write_r(struct _reent *r, int fd, const void *data, unsigned int count)
 {
+#if 0
     (void) r;
     (void) fd;
     unsigned int i = 0;
 
     while (i < count) {
-        uart_write_blocking(STDIO, ((char*)data)[i++]);
+        char ch = ((char *) data)[i];
+
+        if (ch == '\n')
+            uart_write_blocking(STDIO, '\r');
+        uart_write_blocking(STDIO, ch);
+        i++;
+        //uart_write_blocking(STDIO, ((char*)data)[i++]);
     }
 
     return (int)i;
+#else
+    char *c = (char *) data;
+    unsigned int intstat;
+
+    intstat = disableIRQ();
+
+    for (int i = 0; i < count; i++) {
+        if (c[i] == '\n')
+            ringbuffer_add_one(&tx_buf, '\r');
+        ringbuffer_add_one(&tx_buf, c[i]);
+    }
+
+    uart_tx_begin(STDIO);
+
+    restoreIRQ(intstat);
+
+    return count;
+#endif
 }
 
 /**
