@@ -442,8 +442,6 @@ static void _cmd_set_channel(uart1_dev_t *dev)
     msg_send(&msg, uart1_tx_handler_pid);
 }
 
-extern void debug_shortterm_timer(const char *funcname);
-
 /*
  *  command handler: CMD_TRANSMIT_BLOCK (0x05)
  */
@@ -463,7 +461,6 @@ static void _cmd_transmit_blk(uart1_dev_t *dev)
         printf("### %s: called in transmitting ???, data_len = %d\n",
                __FUNCTION__, data_len);
         //dump_buffer((char *) dev->data, data_len);
-        debug_shortterm_timer(__FUNCTION__);
         return;
     }
 
@@ -844,8 +841,6 @@ static void __attribute__((unused)) send_ack(uart1_dev_t *dev, char *buf, int bu
     }
 }
 
-extern void debug_shortterm_timer(const char *funcname);
-
 static int _transmit(uart1_dev_t *dev)
 {
     int res, wait_ack, retry, i, err_occured = 0, msg_pending = 0;
@@ -910,7 +905,6 @@ static int _transmit(uart1_dev_t *dev)
                            __FUNCTION__, i, retry, transmit_len, frame.seq_nr);
                     dump_buffer(transmit_buf, transmit_len);
                     err_occured = 1;
-                    debug_shortterm_timer(__FUNCTION__);
                 }
             }
         }

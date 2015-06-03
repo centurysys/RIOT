@@ -3,6 +3,5 @@
 
 int cmd_vtimer_test(int argc, char **argv);
 int cmd_random_test(int argc, char **argv);
-int cmd_dump_shortterm(int argc, char **argv);
 
 #endif
