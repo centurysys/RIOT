@@ -41,3 +41,12 @@ int cmd_random_test(int argc, char **argv)
 
     return 0;
 }
+
+extern void debug_shortterm_timer(const char *funcname);
+
+int cmd_dump_shortterm(int argc, char **argv)
+{
+    debug_shortterm_timer("SHELL");
+
+    return 0;
+}
