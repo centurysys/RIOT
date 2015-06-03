@@ -71,8 +71,6 @@ ret:
     return result;
 }
 
-extern void uart1_rx_set(int stat, unsigned long arg);
-
 static int send_ack_req = 0;
 
 int16_t ml7396_send_raw(char *buf, int len)
@@ -100,21 +98,15 @@ retry:
         random_read((char *) &rand, 1);
         backoff = aUnitBackoffPeriod * rand; /* usecs */
 
-        uart1_rx_set(101, backoff);
-
         if (backoff > 10) {
             usleep(backoff);
         }
-
-        uart1_rx_set(102, backoff);
 
         ml7396_lock();
 
         status = ml7396_channel_is_clear(&ml7396_netdev);
 
         ml7396_unlock();
-
-        uart1_rx_set(103, backoff);
 
         if (send_ack_req == 1) {
             send_ack_req = 0;
@@ -125,8 +117,6 @@ retry:
         else if (status == 0) {
             /* --- Begin ML7396 critical section --- */
             ml7396_lock();
-
-            uart1_rx_set(104, backoff);
 
             result = ml7396_load_raw(buf, len);
 
@@ -142,18 +132,12 @@ retry:
     }
 
     if (result > 0) {
-        uart1_rx_set(105, result);
-
         ml7396_transmit_tx_buf(&ml7396_netdev);
         result = 0;
-
-        uart1_rx_set(106, result);
 
         /* --- End ML7396 critical section --- */
         ml7396_unlock();
     }
-
-    uart1_rx_set(107, result);
 
     return result;
 }

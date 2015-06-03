@@ -253,6 +253,6 @@ void ml7396_phy_reset(void)
         delay(1000);
     }
     else {
-        usleep(5);
+        usleep(50);
     }
 }

@@ -420,9 +420,9 @@ void ml7396_reset(void)
 
     /* ML7396 RESET */
     gpio_set(ML7396_RESET);
-    usleep(1);
+    usleep(20);
     gpio_clear(ML7396_RESET);
-    usleep(1);
+    usleep(20);
     gpio_set(ML7396_RESET);
 
     usleep(100 * 1000);
