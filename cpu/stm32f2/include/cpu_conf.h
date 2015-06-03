@@ -30,6 +30,24 @@ extern "C" {
 #endif
 
 /**
+ * @brief   ARM Cortex-M specific CPU configuration
+ * @{
+ */
+#define CPU_DEFAULT_IRQ_PRIO            (1U)
+#define CPU_IRQ_NUMOF                   (60U)
+#define CPU_FLASH_BASE                  FLASH_BASE
+/** @} */
+
+/**
+ * @brief Length for reading CPU_ID
+ */
+#define CPUID_ID_LEN                    (12)
+
+void cpu_clock_scale(uint32_t source, uint32_t target, uint32_t *prescale);
+
+#define TRANSCEIVER_BUFFER_SIZE (3)
+
+/**
  * @name Kernel configuration
  *
  * TODO: measure and adjust for the cortex-m3
@@ -55,25 +73,6 @@ extern "C" {
 #endif
 /** @} */
 
-/**
- * @brief Length for reading CPU_ID
- */
-#define CPUID_ID_LEN                    (12)
-
-/**
- * @brief Definition of different panic modes
- */
-typedef enum {
-    HARD_FAULT,
-    WATCHDOG,
-    BUS_FAULT,
-    USAGE_FAULT,
-    DUMMY_HANDLER
-} panic_t;
-
-void cpu_clock_scale(uint32_t source, uint32_t target, uint32_t *prescale);
-
-#define TRANSCEIVER_BUFFER_SIZE (3)
 
 #ifdef __cplusplus
 }

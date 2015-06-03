@@ -186,21 +186,25 @@ int timer_clear(tim_t dev, int channel)
 
 unsigned int timer_read(tim_t dev)
 {
+    unsigned int cnt;
+
     switch (dev) {
 #if TIMER_0_EN
         case TIMER_0:
-            return TIMER_0_DEV->CNT;
+            cnt = TIMER_0_DEV->CNT;
             break;
 #endif
 #if TIMER_1_EN
         case TIMER_1:
-            return TIMER_1_DEV->CNT;
+            cnt = TIMER_1_DEV->CNT;
             break;
 #endif
         case TIMER_UNDEFINED:
         default:
             return 0;
     }
+
+    return cnt;
 }
 
 void timer_start(tim_t dev)
@@ -338,7 +342,7 @@ static inline void irq_handler(tim_t timer, TIM_TypeDef *dev)
     dev->SR = SR;
     dev->DIER = DIER;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 3; i >= 0; i--) {
         if (match & (1 << i)) {
             config[timer].cb(i);
         }
