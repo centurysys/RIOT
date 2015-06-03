@@ -50,8 +50,6 @@ typedef struct vtimer_t {
     priority_queue_node_t priority_queue_entry;
     /** the absoule point in time when the timer expires */
     timex_t absolute;
-    /** the normalized point in time when the timer expires */
-    timex_t normalized;
     /** the action to perform when timer fires */
     void (*action)(struct vtimer_t *timer);
     /** value for msg_t.type */

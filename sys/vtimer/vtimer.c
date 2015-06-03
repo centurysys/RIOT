@@ -44,10 +44,8 @@ void vtimer_print(vtimer_t *t);
 
 #endif
 
-void debug_shortterm_timer(const char *funcname);
-
-#define VTIMER_THRESHOLD (20UL)
-#define VTIMER_BACKOFF (10UL)
+#define VTIMER_THRESHOLD 20UL
+#define VTIMER_BACKOFF 10UL
 
 #define SECONDS_PER_TICK (4096U)
 #define MICROSECONDS_PER_TICK (4096UL * 1000000)
@@ -79,10 +77,8 @@ static volatile int in_callback = false;
 
 static int hwtimer_id = -1;
 static uint32_t hwtimer_next_absolute;
-static uint32_t hwtimer_setting;
 
-
-static uint32_t seconds;
+static uint32_t seconds = 0;
 
 static inline priority_queue_node_t *timer_get_node(vtimer_t *timer)
 {
@@ -128,14 +124,7 @@ static int update_shortterm(void)
     }
 
     /* short term part of the next vtimer */
-    vtimer_t *timer = node_get_timer(shortterm_priority_queue_root.first);
-
-    if (timer->action != vtimer_callback_tick) {
-        hwtimer_next_absolute = shortterm_priority_queue_root.first->priority;
-    }
-    else {
-        hwtimer_next_absolute = timer->absolute.microseconds;
-    }
+    hwtimer_next_absolute = shortterm_priority_queue_root.first->priority;
 
     uint32_t next = hwtimer_next_absolute;
 
@@ -156,7 +145,6 @@ static int update_shortterm(void)
 
     DEBUG("update_shortterm: Set hwtimer to %" PRIu32 " (now=%lu)\n", next, HWTIMER_TICKS_TO_US(hwtimer_now()));
     hwtimer_id = hwtimer_set_absolute(HWTIMER_TICKS(next), vtimer_callback, NULL);
-    hwtimer_setting = HWTIMER_TICKS(next);
 
     return 0;
 }
@@ -166,21 +154,16 @@ void vtimer_callback_tick(vtimer_t *timer)
     (void) timer;
 
     DEBUG("vtimer_callback_tick().\n");
-    debug_shortterm_timer("vtimer_callback_tick[IN]");
-
     seconds += SECONDS_PER_TICK;
 
     longterm_tick_start = longterm_tick_timer.absolute.microseconds;
-
     longterm_tick_timer.absolute.microseconds += MICROSECONDS_PER_TICK;
-    longterm_tick_timer.normalized.seconds += SECONDS_PER_TICK;
-
     set_shortterm(&longterm_tick_timer);
 
     while (longterm_priority_queue_root.first) {
         vtimer_t *timer = node_get_timer(longterm_priority_queue_root.first);
 
-        if (timer->normalized.seconds == seconds) {
+        if (timer->absolute.seconds == seconds) {
             priority_queue_remove_head(&longterm_priority_queue_root);
             set_shortterm(timer);
         }
@@ -188,8 +171,6 @@ void vtimer_callback_tick(vtimer_t *timer)
             break;
         }
     }
-
-    debug_shortterm_timer("vtimer_callback_tick[OUT]");
 }
 
 static void vtimer_callback_msg(vtimer_t *timer)
@@ -214,7 +195,7 @@ static void vtimer_callback_unlock(vtimer_t *timer)
 static int set_shortterm(vtimer_t *timer)
 {
     DEBUG("set_shortterm(): Absolute: %" PRIu32 " %" PRIu32 "\n", timer->absolute.seconds, timer->absolute.microseconds);
-    timer->priority_queue_entry.priority = timer->normalized.microseconds;
+    timer->priority_queue_entry.priority = timer->absolute.microseconds;
     priority_queue_add(&shortterm_priority_queue_root, timer_get_node(timer));
     return 1;
 }
@@ -276,6 +257,7 @@ static int vtimer_set(vtimer_t *timer)
     timex_t now;
     vtimer_now(&now);
     timer->absolute = timex_add(now, timer->absolute);
+    normalize_to_tick(&(timer->absolute));
 
     DEBUG("vtimer_set(): Absolute: %" PRIu32 " %" PRIu32 "\n", timer->absolute.seconds, timer->absolute.microseconds);
     DEBUG("vtimer_set(): NOW: %" PRIu32 " %" PRIu32 "\n", now.seconds, now.microseconds);
@@ -288,11 +270,8 @@ static int vtimer_set(vtimer_t *timer)
         }
     }
 
-    timer->normalized = timer->absolute;
-    normalize_to_tick(&(timer->normalized));
-
     unsigned state = disableIRQ();
-    if (timer->normalized.seconds != seconds) {
+    if (timer->absolute.seconds != seconds) {
         /* we're long-term */
         DEBUG("vtimer_set(): setting long_term\n");
         result = set_longterm(timer);
@@ -356,9 +335,6 @@ void vtimer_init(void)
 
     longterm_tick_timer.absolute.seconds = 0;
     longterm_tick_timer.absolute.microseconds = MICROSECONDS_PER_TICK;
-
-    longterm_tick_timer.normalized.seconds = 0;
-    longterm_tick_timer.normalized.microseconds = MICROSECONDS_PER_TICK;
 
     DEBUG("vtimer_init(): Setting longterm tick to %" PRIu32 "\n", longterm_tick_timer.absolute.microseconds);
 
@@ -473,72 +449,4 @@ void vtimer_print(vtimer_t *t)
            t->pid);
 }
 
-#endif
-
-#ifdef VTIMER_DEBUG
-static void _dump_timer(priority_queue_t *root, char *kind, const char *funcname)
-{
-    priority_queue_node_t *node;
-    vtimer_t *timer;
-    timex_t *normalized, *absolute;
-    char *callback;
-
-    printf("--- %s ---\n", kind);
-
-    for (node = root->first; node; node = node->next) {
-        timer = node_get_timer(node);
-
-        absolute = &timer->absolute;
-        normalized = &timer->normalized;
-
-        if (timer->action == (void *) vtimer_callback)
-            callback = "vtimer_callback";
-        else if (timer->action == vtimer_callback_tick)
-            callback = "vtimer_callback_tick";
-        else if (timer->action == vtimer_callback_msg)
-            callback = "vtimer_callback_msg";
-        else if (timer->action == vtimer_callback_wakeup)
-            callback = "vtimer_callback_wakeup";
-        else if (timer->action == vtimer_callback_unlock)
-            callback = "vtimer_callback_unlock";
-        else
-            sprintf(callback, "%p", timer->action);
-
-        printf("Priority: %11lu, timer: n[%lu:%11lu] a[%lu:%11lu] (%s)\n",
-               (unsigned long) node->priority,
-               normalized->seconds, normalized->microseconds,
-               absolute->seconds, absolute->microseconds,
-               callback);
-    }
-}
-
-void debug_shortterm_timer(const char *funcname)
-{
-    timex_t now;
-    uint32_t counter;
-    unsigned int state;
-
-    vtimer_now(&now);
-    normalize_to_tick(&now);
-
-    counter = hwtimer_now();
-
-    state = disableIRQ();
-
-    printf("=== timer @%s now [%lu:%11lu]:\n", funcname,
-           now.seconds, now.microseconds);
-    printf("  hwtimer setting: %lu (0x%08x)\n", hwtimer_setting, hwtimer_setting);
-    printf("  hwtimer counter: %lu (0x%08x)\n", counter, counter);
-
-    _dump_timer(&longterm_priority_queue_root, "longterm", funcname);
-    _dump_timer(&shortterm_priority_queue_root, "shortterm", funcname);
-
-    puts("");
-
-    restoreIRQ(state);
-}
-#else
-void debug_shortterm_timer(const char *funcname)
-{
-}
 #endif
