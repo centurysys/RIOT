@@ -15,6 +15,8 @@
 
 #include "periph/random.h"
 
+#include "utils.h"
+
 /*
  *
  */
@@ -41,3 +43,15 @@ int cmd_random_test(int argc, char **argv)
 
     return 0;
 }
+
+int cmd_conf_pins(int argc, char **argv)
+{
+    uint8_t conf;
+
+    conf = get_config_pins();
+
+    printf("CONF: 0x%02x\n", (unsigned int) conf);
+
+    return 0;
+}
+
