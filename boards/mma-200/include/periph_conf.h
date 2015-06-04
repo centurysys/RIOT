@@ -294,7 +294,7 @@ extern "C" {
 #define GPIO_8_EN           1
 #define GPIO_9_EN           1
 #define GPIO_10_EN          1
-#define GPIO_11_EN          0
+#define GPIO_11_EN          1
 #define GPIO_IRQ_PRIO       1
 
 /* IRQ config */
@@ -316,7 +316,7 @@ extern "C" {
 #define GPIO_IRQ_15         -1/* not configured */
 
 /* GPIO channel 0 config */
-#define GPIO_0_PORT         GPIOB                   /* Used for TEST SW0 */
+#define GPIO_0_PORT         GPIOB                   /* Used for TEST SW0 / CONF2 */
 #define GPIO_0_PIN          8
 #define GPIO_0_CLK          1                       /* 0: PORT A, 1: B ... */
 #define GPIO_0_EXTI_CFG()   (SYSCFG->EXTICR[2] |= SYSCFG_EXTICR3_EXTI8_PB)
@@ -346,7 +346,7 @@ extern "C" {
 #define GPIO_4_EXTI_CFG()   (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI5_PC)
 #define GPIO_4_IRQ          EXTI9_5_IRQn
 /* GPIO channel 5 config */
-#define GPIO_5_PORT         GPIOA                   /* G-Sensor Int0 */
+#define GPIO_5_PORT         GPIOA                   /* G-Sensor Int0 / CONF0 */
 #define GPIO_5_PIN          3
 #define GPIO_5_CLK          0
 #define GPIO_5_EXTI_CFG()   (SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI3_PA)
@@ -381,6 +381,12 @@ extern "C" {
 #define GPIO_10_CLK         0
 #define GPIO_10_EXTI_CFG()  (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI2_PA)
 #define GPIO_10_IRQ         EXTI2_IRQn
+/* GPIO channel 11 config */
+#define GPIO_11_PORT        GPIOA                   /* CONF1 (<-> MA-E360) */
+#define GPIO_11_PIN         1
+#define GPIO_11_CLK         0
+#define GPIO_11_EXTI_CFG()  (SYSCFG->EXTICR[1] |= SYSCFG_EXTICR1_EXTI1_PA)
+#define GPIO_11_IRQ         EXTI2_IRQn
 
 /** @} */
 
