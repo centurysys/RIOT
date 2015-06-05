@@ -28,3 +28,8 @@ cachegrind.out*
 # Eclipse symbol file (output from make eclipsesym)
 eclipsesym.xml
 /toolchain
+
+# GNU Global
+GPATH
+GRTAGS
+GTAGS
