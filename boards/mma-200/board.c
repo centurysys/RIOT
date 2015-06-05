@@ -19,6 +19,7 @@
  */
 
 #include "board.h"
+#include "cpu.h"
 
 static void leds_init(void);
 
@@ -29,6 +30,10 @@ void board_init(void)
 
     /* initialize the CPU */
     cpu_init();
+
+#ifdef MMA200_UPDATER
+    SCB->VTOR = 0x08060000;
+#endif
 }
 
 /**
