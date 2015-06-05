@@ -34,8 +34,12 @@ SEARCH_DIR(.)
 /* Memory Spaces Definitions */
 MEMORY
 {
-    rom1 (rx) : ORIGIN = 0x08000000, LENGTH = 16K
-    rom2 (rx) : ORIGIN = 0x08020000, LENGTH = 384K
+    /* rom1 (rx) : ORIGIN = 0x08000000, LENGTH = 16K */
+    /* rom2 (rx) : ORIGIN = 0x08020000, LENGTH = 384K */
+    rom1 (rx) : ORIGIN = 0x08000000, LENGTH = 16K  /* vector */
+    rom2 (rx) : ORIGIN = 0x08004000, LENGTH = 16K  /* config */
+    rom3 (rx) : ORIGIN = 0x08008000, LENGTH = 352K /* Application */
+    rom4 (rx) : ORIGIN = 0x08060000, LENGTH = 128K /* Firmware Updater */
     ram (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 
@@ -101,14 +105,14 @@ SECTIONS
 
         . = ALIGN(4);
         _efixed = .;            /* End of text section */
-    } > rom2
+    } > rom3
 
     /* .ARM.exidx is sorted, so has to go in its own output section.  */
     PROVIDE_HIDDEN (__exidx_start = .);
     .ARM.exidx :
     {
       *(.ARM.exidx* .gnu.linkonce.armexidx.*)
-    } > rom2
+    } > rom3
     PROVIDE_HIDDEN (__exidx_end = .);
 
     . = ALIGN(4);
