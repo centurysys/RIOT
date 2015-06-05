@@ -21,6 +21,7 @@
 
 #include "misc_cmds.h"
 #include "ml7396_cmds.h"
+#include "minilzo_test.h"
 
 #include "uart1.h"
 
@@ -37,6 +38,8 @@ static shell_command_t commands[] = {
     { "cca", "do CCA", cmd_cca },
     { "fifowrite", "write to FIFO test", cmd_fifo_write },
     { "confpins", "read CONF pins state", cmd_conf_pins },
+    { "minilzotest", "testing minilzo functions", test_minilzo },
+    { "app", "jump to Flash Application (Firmup tool?)", cmd_jump_to_app },
     { NULL, NULL, NULL }
 };
 

@@ -12,6 +12,8 @@
 #include <string.h>
 
 #include <vtimer.h>
+#include "cpu.h"
+#include "irq.h"
 
 #include "periph/random.h"
 
@@ -55,3 +57,32 @@ int cmd_conf_pins(int argc, char **argv)
     return 0;
 }
 
+typedef void (*pfunc)(void);
+
+static pfunc application;
+static uint32_t jump_address;
+
+#define APPLICATION_ADDRESS 0x08060000
+
+int cmd_jump_to_app(int argc, char **argv)
+{
+    unsigned int state;
+
+    /* check "application"'s stack */
+    if (((*((uint32_t *) APPLICATION_ADDRESS)) & 0x2ffe0000) == 0x20000000) {
+        jump_address = *((uint32_t *) (APPLICATION_ADDRESS + 4));
+        application = (pfunc) jump_address;
+
+        state = disableIRQ();
+        __set_MSP(*((uint32_t *) APPLICATION_ADDRESS));
+
+        application();
+
+        restoreIRQ(state);
+    }
+    else {
+        puts("app: application not programmed.");
+    }
+
+    return -1;
+}
