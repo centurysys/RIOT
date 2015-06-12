@@ -24,6 +24,8 @@
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_registers.h"
 
+#include "crc.h"
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -134,9 +136,6 @@ static ng_pktsnip_t *_make_netif_hdr(uint8_t *mhr)
 static int _send(ng_netdev_t *netdev, ng_pktsnip_t *pkt)
 {
     ng_ml7396_t *dev = (ng_ml7396_t *) netdev;
-    ng_pktsnip_t *snip;
-    uint8_t mhr[NG_IEEE802154_MAX_HDR_LEN];
-    size_t len;
     msg_t msg, reply;
 
     if (pkt == NULL) {
@@ -253,7 +252,9 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     hdr = _make_netif_hdr(mhr);
     if (hdr == NULL) {
         DEBUG("[ng_ml7396] error: unable to allocate netif header\n");
-        return;
+        ng_ml7396_unlock(dev);
+
+        goto ret;
     }
 
     /* fill missing fields in netif header */
@@ -434,13 +435,6 @@ static int _get(ng_netdev_t *device, ng_netconf_opt_t opt,
             ((uint8_t *) val)[0] = ng_ml7396_get_chan(dev);
             return sizeof(uint16_t);
 
-        case NETCONF_OPT_TX_POWER:
-            if (max_len < sizeof(int16_t)) {
-                return -EOVERFLOW;
-            }
-            *((uint16_t *) val) = ng_ml7396_get_txpower(dev);
-            return sizeof(uint16_t);
-
         case NETCONF_OPT_MAX_PACKET_SIZE:
             if (max_len < sizeof(int16_t)) {
                 return -EOVERFLOW;
@@ -589,17 +583,10 @@ static int _set(ng_netdev_t *device, ng_netconf_opt_t opt,
             uint8_t chan = ((uint8_t *) val)[0];
             if ((chan < NG_ML7396_MIN_CHANNEL) ||
                 (chan > NG_ML7396_MAX_CHANNEL) ||
-                ((channel % 2) == 0)) {
+                ((chan % 2) == 0)) {
                 return -ENOTSUP;
             }
             ng_ml7396_set_chan(dev, chan);
-            return sizeof(uint16_t);
-
-        case NETCONF_OPT_TX_POWER:
-            if (len > sizeof(int16_t)) {
-                return -EOVERFLOW;
-            }
-            ng_ml7396_set_txpower(dev, *((int16_t *) val));
             return sizeof(uint16_t);
 
         case NETCONF_OPT_STATE:
@@ -675,19 +662,6 @@ static int _add_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
     return 0;
 }
 
-static int _add_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
-{
-    if (dev == NULL) {
-        return -ENODEV;
-    }
-    if (dev->event_cb) {
-        return -ENOBUFS;
-    }
-
-    dev->event_cb = cb;
-    return 0;
-}
-
 static int _rem_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
 {
     if (dev == NULL) {
@@ -701,10 +675,11 @@ static int _rem_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
     return 0;
 }
 
-static void _isr_event(ng_netdev_t *device, uint32_t event_type)
+static void _isr_event(ng_netdev_t *netdev, uint32_t event_type)
 {
     ng_ml7396_t *dev = (ng_ml7396_t *) netdev;
     uint32_t status, enable;
+    int page;
 
     enable = ng_ml7396_get_interrupt_enable(dev);
     status = ng_ml7396_get_interrupt_status(dev);

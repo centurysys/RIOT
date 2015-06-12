@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 
+#include <mutex.h>
 #include "board.h"
 #include "periph/spi.h"
 #include "periph/gpio.h"
@@ -52,28 +53,9 @@ extern "C" {
   * @brief   Channel configuration
   * @{
   */
-#ifdef MODULE_NG_AT86RF212B
-/* the AT86RF212B has a sub-1GHz radio */
-#define NG_ML7396_MIN_CHANNEL        (0)
-#define NG_ML7396_MAX_CHANNEL        (10)
+#define NG_ML7396_MIN_CHANNEL        (33)
+#define NG_ML7396_MAX_CHANNEL        (59)
 #define NG_ML7396_DEFAULT_CHANNEL    (5)
-#else
-#define NG_ML7396_MIN_CHANNEL        (11U)
-#define NG_ML7396_MAX_CHANNEL        (26U)
-#define NG_ML7396_DEFAULT_CHANNEL    (17U)
-#endif
-/** @} */
-
-/**
-  * @brief   Frequency configuration
-  * @{
-  */
-#ifdef MODULE_NG_AT86RF212B
-typedef enum {
-    NG_ML7396_FREQ_915MHZ,    /**< frequency 915MHz enabled */
-    NG_ML7396_FREQ_868MHZ,    /**< frequency 868MHz enabled */
-} ng_ml7396_freq_t;
-#endif
 /** @} */
 
 /**
@@ -88,6 +70,46 @@ typedef enum {
  */
 #define NG_ML7396_DEFAULT_TXPOWER    (0U)
 
+
+/**
+ * @brief   Internal device option flags
+ * @{
+ */
+#define NG_ML7396_OPT_AUTOACK        (0x0001)    /**< auto ACKs active */
+#define NG_ML7396_OPT_CSMA           (0x0002)    /**< CSMA active */
+#define NG_ML7396_OPT_PROMISCUOUS    (0x0004)    /**< promiscuous mode
+                                                  *   active */
+#define NG_ML7396_OPT_PRELOADING     (0x0008)    /**< preloading enabled */
+#define NG_ML7396_OPT_TELL_TX_START  (0x0010)    /**< notify MAC layer on TX
+                                                  *   start */
+#define NG_ML7396_OPT_TELL_TX_END    (0x0020)    /**< notify MAC layer on TX
+                                                  *   finished */
+#define NG_ML7396_OPT_TELL_RX_START  (0x0040)    /**< notify MAC layer on RX
+                                                  *   start */
+#define NG_ML7396_OPT_TELL_RX_END    (0x0080)    /**< notify MAC layer on RX
+                                                  *   finished */
+#define NG_ML7396_OPT_RAWDUMP        (0x0100)    /**< pass RAW frame data to
+                                                  *   upper layer */
+#define NG_ML7396_OPT_SRC_ADDR_LONG  (0x0200)    /**< send data using long
+                                                  *   source address */
+#define NG_ML7396_OPT_USE_SRC_PAN    (0x0400)    /**< do not compress source
+                                                  *   PAN ID */
+/** @} */
+
+
+/**
+ * @brief
+ */
+struct wait_interrupt {
+    uint32_t int_wait;
+    int clear;
+    mutex_t *mutex;
+};
+
+#ifndef NG_ML7396_INT_WAIT
+#define NG_ML7396_INT_WAIT 4
+#endif
+
 /**
  * @brief   Device descriptor for ML7396 radio devices
  */
@@ -101,9 +123,10 @@ typedef struct {
     /* device specific fields */
     spi_t spi;                          /**< used SPI device */
     gpio_t cs_pin;                      /**< chip select pin */
-    gpio_t reset_pin;                   /**< reset pin */
     gpio_t int_pin;                     /**< external interrupt pin */
+    gpio_t reset_pin;                   /**< reset pin */
     gpio_t tcxo_pin;                    /**< TCXO control pin */
+
     ng_nettype_t proto;                 /**< protocol the radio expects */
     uint8_t state;                      /**< current state of the radio */
     uint8_t seq_nr;                     /**< sequence number to use next */
@@ -116,6 +139,7 @@ typedef struct {
     uint8_t idle_state;                 /**< state to return to after sending */
 
     mutex_t mutex;
+    struct wait_interrupt int_waits[NG_ML7396_INT_WAIT];
 
     uint8_t max_retries;
 } ng_ml7396_t;
@@ -131,12 +155,14 @@ typedef struct {
  * @param[in] int_pin       GPIO pin connected to the interrupt pin
  * @param[in] sleep_pin     GPIO pin connected to the sleep pin
  * @param[in] reset_pin     GPIO pin connected to the reset pin
+ * @param[in] tcxo_pin      GPIO pin connected to the TCXO pin
  *
  * @return                  0 on success
  * @return                  <0 on error
  */
 int ng_ml7396_init(ng_ml7396_t *dev, spi_t spi, spi_speed_t spi_speed,
-                   gpio_t cs_pin, gpio_t int_pin, gpio_t reset_pin);
+                   gpio_t cs_pin, gpio_t int_pin, gpio_t reset_pin,
+                   gpio_t tcxo_pin);
 
 /**
  * @brief struct holding all params needed for device initialization
@@ -147,6 +173,7 @@ typedef struct ml7396_params {
     gpio_t cs_pin;          /**< GPIO pin connected to chip select */
     gpio_t int_pin;         /**< GPIO pin connected to the interrupt pin */
     gpio_t reset_pin;       /**< GPIO pin connected to the reset pin */
+    gpio_t tcxo_pin;        /**< GPIO pin connected to the tcxo pin */
 } ml7396_params_t;
 
 /**
@@ -294,6 +321,8 @@ void ng_ml7396_set_state(ng_ml7396_t *dev, uint8_t state);
  */
 size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len);
 
+size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt);
+
 /**
  * @brief   Prepare for sending of data
  *
@@ -302,7 +331,7 @@ size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len);
  *
  * @param[in] dev            device to prepare for sending
  */
-void ng_ml7396_tx_prepare(ng_ml7396_t *dev);
+int ng_ml7396_tx_prepare(ng_ml7396_t *dev);
 
 /**
  * @brief   Load chunks of data into the transmit buffer of the given device
@@ -310,19 +339,19 @@ void ng_ml7396_tx_prepare(ng_ml7396_t *dev);
  * @param[in] dev           device to write data to
  * @param[in] data          buffer containing the data to load
  * @param[in] len           number of bytes in @p buffer
- * @param[in] offset        offset used when writing data to internal buffer
  *
- * @return                  offset + number of bytes written
+ * @return                  number of bytes written
  */
-size_t ng_ml7396_tx_load(ng_ml7396_t *dev, uint8_t *data, size_t len,
-                         size_t offset);
+size_t ng_ml7396_tx_load(ng_ml7396_t *dev, uint8_t *data, size_t len);
 
 /**
  * @brief   Trigger sending of data previously loaded into transmit buffer
  *
  * @param[in] dev           device to trigger
  */
-void ng_ml7396_tx_exec(ng_ml7396_t *dev);
+int ng_ml7396_tx_exec(ng_ml7396_t *dev);
+
+int ng_ml7396_switch_to_rx(ng_ml7396_t *dev);
 
 /**
  * @brief   Read the length of a received packet
@@ -339,10 +368,8 @@ size_t ng_ml7396_rx_len(ng_ml7396_t *dev);
  * @param[in]  dev          device to read from
  * @param[out] data         buffer to write data to
  * @param[in]  len          number of bytes to read from device
- * @param[in]  offset       offset in the receive buffer
  */
-void ng_ml7396_rx_read(ng_ml7396_t *dev, uint8_t *data, size_t len,
-                          size_t offset);
+void ng_ml7396_rx_read(ng_ml7396_t *dev, uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }

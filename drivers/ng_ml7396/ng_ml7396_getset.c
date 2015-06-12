@@ -72,13 +72,6 @@ uint8_t ng_ml7396_get_chan(ng_ml7396_t *dev)
     return dev->chan;
 }
 
-void ng_ml7396_set_chan(ng_ml7396_t *dev, uint8_t channel)
-{
-    dev->chan = channel;
-
-    _ng_ml7396_set_channel(dev, channel);
-}
-
 uint16_t ng_ml7396_get_pan(ng_ml7396_t *dev)
 {
     return dev->pan;
@@ -105,8 +98,6 @@ void ng_ml7396_set_max_retries(ng_ml7396_t *dev, uint8_t max)
 
 void ng_ml7396_set_option(ng_ml7396_t *dev, uint16_t option, bool state)
 {
-    uint8_t tmp;
-
     DEBUG("set option %i to %i\n", option, state);
 
     /* set option field */
@@ -152,7 +143,7 @@ uint8_t ng_ml7396_get_state(ng_ml7396_t *dev)
 {
     uint8_t status;
 
-    status = ng_ml7396_get_status(dev);
+    //status = ng_ml7396_get_status(dev);
     return status;
 }
 

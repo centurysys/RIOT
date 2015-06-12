@@ -105,6 +105,16 @@ static uint32_t _ng_ml7396_get_interrupt_regs(const ng_ml7396_t *dev, uint16_t r
     return val;
 }
 
+void ng_ml7396_lock(ng_ml7396_t *dev)
+{
+    mutex_lock(&dev->mutex);
+}
+
+void ng_ml7396_unlock(ng_ml7396_t *dev)
+{
+    mutex_unlock(&dev->mutex);
+}
+
 void ng_ml7396_reg_write(const ng_ml7396_t *dev, uint16_t reg, uint8_t value)
 {
     uint8_t bank, addr;
@@ -114,7 +124,7 @@ void ng_ml7396_reg_write(const ng_ml7396_t *dev, uint16_t reg, uint8_t value)
 
     spi_acquire(dev->spi);
 
-    _ng_ml7396_bank_sel(bank);
+    _ng_ml7396_bank_sel(dev, bank);
     _ng_ml7396_spi_write(dev, addr, value);
 
     spi_release(dev->spi);
@@ -179,7 +189,7 @@ void ng_ml7396_fifo_writes(const ng_ml7396_t *dev, const uint8_t *values, size_t
     spi_acquire(dev->spi);
 
     _ng_ml7396_bank_sel(dev, bank);
-    _ng_ml7396_spi_writes(dev, addr, data, len);
+    _ng_ml7396_spi_writes(dev, addr, values, len);
 
     spi_release(dev->spi);
 }
@@ -194,7 +204,7 @@ int ng_ml7396_fifo_reads(const ng_ml7396_t *dev, uint8_t *values, size_t len)
     spi_acquire(dev->spi);
 
     _ng_ml7396_bank_sel(dev, bank);
-    _ng_ml7396_spi_reads(dev, addr, data, len);
+    _ng_ml7396_spi_reads(dev, addr, values, len);
 
     spi_release(dev->spi);
 }
@@ -270,6 +280,15 @@ void ng_ml7396_phy_reset(const ng_ml7396_t *dev)
     }
 }
 
+int _ng_ml7396_wait_interrupt(ng_ml7396_t *dev, uint32_t interrupts,
+                              int clear, mutex_t *mutex)
+{
+
+
+
+    return 0;
+}
+
 int _ng_ml7396_wait_rf_stat_poll(ng_ml7396_t *dev, uint8_t stat)
 {
     int i, res;
@@ -324,7 +343,7 @@ void _ng_ml7396_clear_rx_interrupts(ng_ml7396_t *dev, int page, int clear_fifo)
     if (clear_fifo == 1) {
         printf("*** clear with: 0x%08x (status: 0x%08x)\n",
                (unsigned int) interrupts, (unsigned int) status);
-        ml7396_phy_reset();
+        ng_ml7396_phy_reset(dev);
     }
 
     ng_ml7396_clear_interrupts(dev, interrupts);

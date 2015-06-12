@@ -18,10 +18,20 @@
 #ifndef NG_ML7396_INTERNAL_H_
 #define NG_ML7396_INTERNAL_H_
 
+#include "ng_ml7396.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum {
+    MSG_ACK_RECEIVED,
+} ml7396_msg_t;
+
+
+/* Lock/Unlock ML7396 */
+void ng_ml7396_lock(ng_ml7396_t *dev);
+void ng_ml7396_unlock(ng_ml7396_t *dev);
 
 /* Write Register(s) */
 void ng_ml7396_reg_write(const ng_ml7396_t *dev, uint16_t reg, uint8_t value);
@@ -48,6 +58,8 @@ void ng_ml7396_set_interrupt_mask(const ng_ml7396_t *dev, uint32_t interrupts);
 void ng_ml7396_phy_reset(const ng_ml7396_t *dev);
 
 /* Internal use */
+int _ng_ml7396_wait_interrupt(ng_ml7396_t *dev, uint32_t interrupts,
+                              int clear, mutex_t *mutex);
 int _ng_ml7396_wait_rf_stat_poll(ng_ml7396_t *dev, uint8_t stat);
 void _ng_ml7396_clear_rx_interrupts(ng_ml7396_t *dev, int page, int clear_fifo);
 

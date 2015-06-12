@@ -31,6 +31,7 @@
 #include "ng_ml7396_registers.h"
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_netdev.h"
+#include "ng_ml7396_tx.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -204,7 +205,7 @@ static void _ng_ml7396_spi_init(ng_ml7396_t *dev, spi_speed_t spi_speed)
 
 static void _ng_ml7396_gpio_interrupt_init(ng_ml7396_t *dev)
 {
-    gpio_init_int(dev, dev->int_pin, GPIO_PULLUP, GPIO_FALLING,
+    gpio_init_int(dev->int_pin, GPIO_PULLUP, GPIO_FALLING,
                   (gpio_cb_t) _irq_handler, dev);
 
     ng_ml7396_set_interrupt_mask(dev, ML7396_INT_ALL);
@@ -212,13 +213,16 @@ static void _ng_ml7396_gpio_interrupt_init(ng_ml7396_t *dev)
 
 static void _ng_ml7396_clk_init(ng_ml7396_t *dev)
 {
+    mutex_t mutex = MUTEX_INIT;
+
     ng_ml7396_set_interrupt_enable(dev, INT_CLK_STABLE);
 
     ng_ml7396_reg_write(dev, ML7396_REG_RST_SET, 0xff);
     ng_ml7396_reg_write(dev, ML7396_REG_CLK_SET, (CLK_Done | TCXO_EN |
                                                   CLK3_EN | CLK2_EN | CLK1_EN | CLK0_EN));
 
-    //ng_ml7396_wait_interrupt(dev, INT_CLK_STABLE, 1, &ml7396_mutex);
+    mutex_lock(&mutex);
+    _ng_ml7396_wait_interrupt(dev, INT_CLK_STABLE, /* clear = */ 1, &mutex);
 }
 
 static void _ng_ml7396_setup_rf_basic_settings(ng_ml7396_t *dev)
@@ -235,6 +239,7 @@ static void _ng_ml7396_rf_init(ng_ml7396_t *dev)
     uint8_t val;
     int16_t bpf_offset, bpf_cca_offset, sign;
     uint16_t bpf_val, bpf_cca_val;
+    mutex_t mutex = MUTEX_INIT;
 
     _ng_ml7396_setup_rf_basic_settings(dev);
 
@@ -265,7 +270,8 @@ static void _ng_ml7396_rf_init(ng_ml7396_t *dev)
     ng_ml7396_reg_write(dev, ML7396_REG_VCO_CAL_START, 0x01);
 
     /* wait for calibration done. */
-    ng_ml7396_wait_interrupt(dev, INT_VCO_DONE, 1, &ml7396_mutex);
+    mutex_lock(&mutex);
+    _ng_ml7396_wait_interrupt(dev, INT_VCO_DONE, /* clear = */ 1, &mutex);
 
     ng_ml7396_set_interrupt_mask(dev, INT_VCO_DONE);
 }
@@ -353,7 +359,8 @@ static size_t _make_data_frame_hdr(ng_ml7396_t *dev, uint8_t *buf,
 
 
 int ng_ml7396_init(ng_ml7396_t *dev, spi_t spi, spi_speed_t spi_speed,
-                   gpio_t cs_pin, gpio_t int_pin, gpio_t reset_pin)
+                   gpio_t cs_pin, gpio_t int_pin, gpio_t reset_pin,
+                   gpio_t tcxo_pin)
 {
     dev->driver = &ng_ml7396_driver;
 
@@ -362,6 +369,7 @@ int ng_ml7396_init(ng_ml7396_t *dev, spi_t spi, spi_speed_t spi_speed,
     dev->cs_pin = cs_pin;
     dev->int_pin = int_pin;
     dev->reset_pin = reset_pin;
+    dev->tcxo_pin = tcxo_pin;
 
     mutex_init(&dev->mutex);
 
@@ -392,15 +400,16 @@ void ng_ml7396_reset(ng_ml7396_t *dev)
     _ng_ml7396_clk_init(dev);
     _ng_ml7396_rf_init(dev);
 
-    ng_ml7396_set_channel(dev, 33);
+    ng_ml7396_set_chan(dev, 33);
 
     ng_ml7396_switch_to_rx(dev);
 }
 
-void _ng_ml7396_set_channel(ng_ml7396_t *dev, uint8_t channel)
+void ng_ml7396_set_chan(ng_ml7396_t *dev, uint8_t channel)
 {
     uint8_t ch;
 
+    dev->chan = channel;
     ch = (uint8_t) ((channel - 33) / 2);
 
     ng_ml7396_reg_write(dev, ML7396_REG_CH_SET, ch);
@@ -445,7 +454,8 @@ bool ng_ml7396_cca(ng_ml7396_t *dev)
 
 size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
-    int retry, res;
+    ng_pktsnip_t *pkt;
+    msg_t msg, reply;
 
     /* check data length */
     if (len > NG_ML7396_MAX_PKT_LENGTH) {
@@ -453,38 +463,22 @@ size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len)
         return 0;
     }
 
-    for (retry = 0; retry < dev->max_retries; i++) {
-        _ng_ml7396_backoff(dev);
+    pkt = ng_pktbuf_add(NULL, data, len, NG_NETTYPE_NETIF);
 
-        if (ng_ml7396_tx_prepare(dev) == 0) {
-            if (ng_ml7396_tx_load(dev, data, len) > 0) {
-                if (ng_ml7396_tx_exec(dev) == 0) {
-                    res = ng_ml7396_wait_ack(dev);
+    msg.type = NG_NETAPI_MSG_TYPE_SND;
+    msg.content.ptr = (char *) pkt;
 
-                    if (res == 0) {
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    msg_send_receive(&msg, &reply, dev->tx_pid);
 
-    return len;
+    return (int) msg.content.value;
 }
 
 size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
 {
-    ng_pktsnip_t *pkt, *snip;
+    ng_pktsnip_t *snip;
     uint8_t mhr[NG_IEEE802154_MAX_HDR_LEN];
     size_t len;
     int res;
-
-    /* check data length */
-    if (len > NG_ML7396_MAX_PKT_LENGTH) {
-        DEBUG("[ng_ml7396] Error: data to send exceeds max packet size\n");
-        len = -EOVERFLOW;
-        goto ret;
-    }
 
     /* create 802.15.4 header */
     len = _make_data_frame_hdr(dev, mhr, (ng_netif_hdr_t *) pkt->data);
@@ -539,8 +533,8 @@ ret:
 
 int ng_ml7396_tx_prepare(ng_ml7396_t *dev)
 {
-    int i;
-    uint32_t status;
+    int i, yield = 0;
+    uint32_t status, enable;
     uint8_t reg;
 
     if (ng_ml7396_cca(dev) == false) {
@@ -579,7 +573,7 @@ int ng_ml7396_tx_prepare(ng_ml7396_t *dev)
         }
     }
 
-    if (ng_ml7396_switch_to_tx(dev) != 0) {
+    if (ng_ml7396_tx_exec(dev) != 0) {
         printf("%s: RX -> TX timeouted...\n", __FUNCTION__);
         return -ETIMEDOUT;
     }
@@ -626,5 +620,5 @@ int ng_ml7396_switch_to_rx(ng_ml7396_t *dev)
 
 void ng_ml7396_rx_read(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
-    return ng_ml7396_fifo_reads(dev, data, len);
+    ng_ml7396_fifo_reads(dev, data, len);
 }

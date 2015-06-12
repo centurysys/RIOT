@@ -17,6 +17,11 @@
  * @}
  */
 
+#include "vtimer.h"
+
+#include "net/ng_netapi.h"
+#include "net/ng_pktbuf.h"
+
 #include "ng_ml7396_registers.h"
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_netdev.h"
@@ -68,14 +73,16 @@ static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
     size_t sent;
     int i, retry;
 
-    pkt = (ng_pktsnip_t *) msg->content.ptr;
+    sent = -ETIMEDOUT;
 
+    pkt = (ng_pktsnip_t *) msg->content.ptr;
+    retry = dev->max_retries;
 
     for (i = 0; i < retry; i++) {
         sent = ng_ml7396_send_pkt(dev, pkt);
 
         if (sent > 0) {
-            if (_ng_ml7396_wait_ack(dev) == 0) {
+            if (_ng_ml7396_wait_ack(dev, dev->seq_nr) == 0) {
                 break;
             }
             else {
@@ -86,7 +93,7 @@ static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
 
     ng_pktbuf_release(pkt);
 
-    msg.content.value = (uint32_t) sent;
+    msg->content.value = (uint32_t) sent;
 
     msg_reply(msg, msg);
 }
@@ -101,7 +108,7 @@ static void *_ng_ml7396_tx_thread(void *args)
 
         switch (msg.type) {
             case NG_NETAPI_MSG_TYPE_SND:
-                _ng_ml7396_send(dev, msg);
+                _ng_ml7396_send(dev, &msg);
                 break;
 
             default:
@@ -115,7 +122,7 @@ static void *_ng_ml7396_tx_thread(void *args)
 
 kernel_pid_t ng_ml7396_tx_init(ng_ml7396_t *dev)
 {
-    kernl_pid_t pid;
+    kernel_pid_t pid;
 
     if (!dev) {
         return -ENODEV;
@@ -132,5 +139,5 @@ kernel_pid_t ng_ml7396_tx_init(ng_ml7396_t *dev)
         thread_wakeup(pid);
     }
 
-    return pid;
+    return _ml7396_tx_thread_pid;
 }
