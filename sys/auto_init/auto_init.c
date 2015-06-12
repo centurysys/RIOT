@@ -338,6 +338,11 @@ void auto_init(void)
     auto_init_kw2xrf();
 #endif
 
+#ifdef MODULE_NG_ML7396
+    extern void auto_init_ng_ml7396(void);
+    auto_init_ng_ml7396();
+#endif
+
 #ifdef MODULE_NG_NETDEV_ETH
     extern void auto_init_ng_netdev_eth(void);
     auto_init_ng_netdev_eth();
