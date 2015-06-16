@@ -43,10 +43,10 @@ extern "C" {
  * @{
  */
 #define ML7396_SPI       SPI_0
-#define ML7396_CS        GPIO_7
-#define ML7396_INT       GPIO_10
-#define ML7396_RESET     GPIO_8
-#define ML7396_TCXO      GPIO_9
+#define ML7396_CS        GPIO(PORT_A, 4)
+#define ML7396_INT       GPIO(PORT_A, 2)
+#define ML7396_RESET     GPIO(PORT_C, 2)
+#define ML7396_TCXO      GPIO(PORT_B, 0)
 #define ML7396_SPI_CLK   SPI_SPEED_15MHZ
 /** @} */
 
@@ -57,6 +57,7 @@ extern "C" {
 #define STDIO               UART_0
 #define STDIO_BAUDRATE      (115200U)
 #define STDIO_RX_BUFSIZE    (64U)
+#define STDIO_TX_BUFSIZE    (4096U * 2)
 /** @} */
 
 /**
