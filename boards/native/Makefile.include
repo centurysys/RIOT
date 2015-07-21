@@ -39,6 +39,7 @@ export GPROF ?= gprof
 
 # basic cflags:
 export CFLAGS += -Wall -Wextra -pedantic
+export CFLAGS += -ffunction-sections -fdata-sections
 ifeq ($(shell uname -m),x86_64)
 export CFLAGS += -m32
 endif
@@ -47,7 +48,7 @@ export CFLAGS += -fstack-protector-all
 endif
 ifeq ($(shell uname -s),FreeBSD)
 ifeq ($(shell uname -m),amd64)
-export CFLAGS += -DCOMPAT_32BIT -L/usr/lib32 -B/usr/lib32
+export CFLAGS += -m32 -DCOMPAT_32BIT -B/usr/lib32
 endif
 endif
 
@@ -60,7 +61,7 @@ export LINKFLAGS += -m32
 endif
 ifeq ($(shell uname -s),FreeBSD)
 ifeq ($(shell uname -m),amd64)
-export LINKFLAGS += -DCOMPAT_32BIT -L/usr/lib32 -B/usr/lib32
+export LINKFLAGS += -m32 -DCOMPAT_32BIT -L/usr/lib32 -B/usr/lib32
 endif
 export LINKFLAGS += -L $(BINDIR)
 else
@@ -90,6 +91,9 @@ all-debug: export CFLAGS += -g
 all-cachegrind: export CFLAGS += -g
 all-gprof: export CFLAGS += -pg
 all-gprof: export LINKFLAGS += -pg
+all-asan: export CFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
+all-asan: export CFLAGS += -DNATIVE_IN_CALLOC
+all-asan: export LINKFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
 
 export INCLUDES += $(NATIVEINCLUDES)
 
@@ -120,6 +124,8 @@ all: # do not override first target
 all-debug: all
 
 all-gprof: all
+
+all-asan: all
 
 all-valgrind: all
 

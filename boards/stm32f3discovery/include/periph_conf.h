@@ -16,8 +16,8 @@
  * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
  */
 
-#ifndef __PERIPH_CONF_H
-#define __PERIPH_CONF_H
+#ifndef PERIPH_CONF_H_
+#define PERIPH_CONF_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -119,7 +119,7 @@ extern "C" {
 /* PWM 0 device configuration */
 #define PWM_0_DEV           TIM3
 #define PWM_0_CHANNELS      4
-#define PWM_0_CLK           (36000000U)
+#define PWM_0_CLK           (72000000U)
 #define PWM_0_CLKEN()       (RCC->APB1ENR |= RCC_APB1ENR_TIM3EN)
 #define PWM_0_CLKDIS()      (RCC->APB1ENR &= ~(RCC_APB1ENR_TIM3EN))
 /* PWM 0 pin configuration */
@@ -134,7 +134,7 @@ extern "C" {
 /* PWM 1 device configuration */
 #define PWM_1_DEV           TIM4
 #define PWM_1_CHANNELS      4
-#define PWM_1_CLK           (36000000U)
+#define PWM_1_CLK           (72000000U)
 #define PWM_1_CLKEN()       (RCC->APB1ENR |= RCC_APB1ENR_TIM4EN)
 #define PWM_1_CLKDIS()      (RCC->APB1ENR &= ~(RCC_APB1ENR_TIM4EN))
 /* PWM 1 pin configuration */
@@ -248,4 +248,4 @@ extern "C" {
 }
 #endif
 
-#endif /* __PERIPH_CONF_H */
+#endif /* PERIPH_CONF_H_ */

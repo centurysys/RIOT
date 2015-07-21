@@ -23,6 +23,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <inttypes.h>
 
 #include "vtimer.h"
 #include "thread.h"
@@ -30,6 +31,8 @@
 
 #define MAXCOUNT 100
 #define MAXDIFF 10000
+
+#define MSG_QUEUE_SIZE 16
 
 char timer_stack[THREAD_STACKSIZE_MAIN*4];
 
@@ -56,8 +59,8 @@ void *timer_thread(void *arg)
     (void) arg;
     printf("This is thread %" PRIkernel_pid "\n", thread_getpid());
 
-    msg_t msgq[16];
-    msg_init_queue(msgq, sizeof(msgq));
+    msg_t msgq[MSG_QUEUE_SIZE];
+    msg_init_queue(msgq, MSG_QUEUE_SIZE);
 
     while (1) {
         msg_t m;

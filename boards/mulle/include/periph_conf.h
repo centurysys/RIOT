@@ -17,8 +17,8 @@
  * @author      Joakim Gebart <joakim.gebart@eistec.se>
  */
 
-#ifndef MULLE_PERIPH_CONF_H
-#define MULLE_PERIPH_CONF_H
+#ifndef MULLE_PERIPH_CONF_H_
+#define MULLE_PERIPH_CONF_H_
 
 #ifdef __cplusplus
 extern "C"
@@ -793,8 +793,12 @@ extern "C"
 /**
  * RTC module crystal load capacitance configuration bits.
  */
-/* enable 12pF load capacitance, might need adjusting.. */
-#define RTT_LOAD_CAP_BITS   (RTC_CR_SC8P_MASK | RTC_CR_SC4P_MASK)
+/* The crystal on the Mulle is designed for 12.5 pF load capacitance. According
+ * to the data sheet, the K60 will have a 5 pF parasitic capacitance on the
+ * XTAL32/EXTAL32 connection. The board traces might give some minor parasitic
+ * capacitance as well. */
+/* enable 6pF load capacitance, might need adjusting.. */
+#define RTT_LOAD_CAP_BITS   (RTC_CR_SC4P_MASK | RTC_CR_SC2P_MASK | RTC_CR_SC1P_MASK)
 /** @} */
 
 
@@ -811,5 +815,5 @@ extern "C"
 }
 #endif
 
-#endif /* MULLE_PERIPH_CONF_H */
+#endif /* MULLE_PERIPH_CONF_H_ */
 /** @} */

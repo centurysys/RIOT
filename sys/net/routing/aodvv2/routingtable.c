@@ -17,6 +17,9 @@
  * @author      Lotte Steenbrink <lotte.steenbrink@fu-berlin.de>
  */
 
+#include <stdio.h>
+#include <inttypes.h>
+
 #include "routingtable.h"
 #include "aodv_debug.h"
 
@@ -25,6 +28,7 @@
 
 /* helper functions */
 static void _reset_entry_if_stale(uint8_t i);
+static void print_json_added_rt_entry(struct aodvv2_routing_entry_t *entry);
 
 static struct aodvv2_routing_entry_t routing_table[AODVV2_MAX_ROUTING_ENTRIES];
 static timex_t null_time, max_seqnum_lifetime, active_interval, max_idletime, validity_t;
@@ -56,6 +60,8 @@ struct netaddr *routingtable_get_next_hop(struct netaddr *dest, aodvv2_metric_t 
 
 void routingtable_add_entry(struct aodvv2_routing_entry_t *entry)
 {
+    print_json_added_rt_entry(entry);
+
     /* only add if we don't already know the address */
     if (routingtable_get_entry(&(entry->addr), entry->metricType)) {
         return;
@@ -210,8 +216,7 @@ bool routingtable_offers_improvement(struct aodvv2_routing_entry_t *rt_entry,
 }
 
 void routingtable_fill_routing_entry_t_rreq(struct aodvv2_packet_data *packet_data,
-                                            struct aodvv2_routing_entry_t *rt_entry,
-                                            uint8_t link_cost)
+                                            struct aodvv2_routing_entry_t *rt_entry)
 {
     rt_entry->addr = packet_data->origNode.addr;
     rt_entry->seqnum = packet_data->origNode.seqnum;
@@ -219,13 +224,12 @@ void routingtable_fill_routing_entry_t_rreq(struct aodvv2_packet_data *packet_da
     rt_entry->lastUsed = packet_data->timestamp;
     rt_entry->expirationTime = timex_add(packet_data->timestamp, validity_t);
     rt_entry->metricType = packet_data->metricType;
-    rt_entry->metric = packet_data->origNode.metric + link_cost;
+    rt_entry->metric = packet_data->origNode.metric;
     rt_entry->state = ROUTE_STATE_ACTIVE;
 }
 
 void routingtable_fill_routing_entry_t_rrep(struct aodvv2_packet_data *packet_data,
-                                            struct aodvv2_routing_entry_t *rt_entry,
-                                            uint8_t link_cost)
+                                            struct aodvv2_routing_entry_t *rt_entry)
 {
     rt_entry->addr = packet_data->targNode.addr;
     rt_entry->seqnum = packet_data->targNode.seqnum;
@@ -233,8 +237,34 @@ void routingtable_fill_routing_entry_t_rrep(struct aodvv2_packet_data *packet_da
     rt_entry->lastUsed = packet_data->timestamp;
     rt_entry->expirationTime = timex_add(packet_data->timestamp, validity_t);
     rt_entry->metricType = packet_data->metricType;
-    rt_entry->metric = packet_data->targNode.metric + link_cost;
+    rt_entry->metric = packet_data->targNode.metric;
     rt_entry->state = ROUTE_STATE_ACTIVE;
+}
+
+#if TEST_SETUP
+/* Write JSON representation of rt_entry to json_str */
+static void routingtable_entry_to_json(struct aodvv2_routing_entry_t *rt_entry, char* json_str)
+{
+
+    struct netaddr_str nbuf_addr, nbuf_nexthop;
+
+    sprintf(json_str,"{\"addr\": \"%s\", \"next_hop\": \"%s\", \"seqnum\": %d,"
+                     "\"metric\": %d, \"state\": %d}",
+                     netaddr_to_string(&nbuf_addr, &rt_entry->addr),
+                     netaddr_to_string(&nbuf_nexthop, &rt_entry->nextHopAddr),
+                     rt_entry->seqnum, rt_entry->metric, rt_entry->state);
+}
+#endif
+
+static void print_json_added_rt_entry(struct aodvv2_routing_entry_t *entry)
+{
+#if TEST_SETUP
+    char rt_entry_json [500];
+    routingtable_entry_to_json(entry, rt_entry_json);
+    printf("{\"log_type\": \"added_rt_entry\", \"log_data\": %s}\n", rt_entry_json);
+#else
+    (void) entry; /* silence compiler */
+#endif
 }
 
 void print_routingtable(void)

@@ -199,20 +199,20 @@ static ng_pktsnip_t *_pktbuf_add_unsafe(ng_pktsnip_t *pkt, void *data,
 {
     ng_pktsnip_t *new_pktsnip;
 
-    new_pktsnip = (ng_pktsnip_t *)_pktbuf_internal_alloc(sizeof(ng_pktsnip_t));
-    DEBUG("pktbuf: allocated (new_pktsnip = %p) ", (void *)pkt);
-
-    if (new_pktsnip == NULL) {
-        DEBUG("=> failed\n");
-        return NULL;
-    }
-
-    DEBUG("of size %u\n", (unsigned)sizeof(ng_pktsnip_t));
-
     if (pkt == NULL || pkt->data != data) {
+        new_pktsnip = (ng_pktsnip_t *)_pktbuf_internal_alloc(sizeof(ng_pktsnip_t));
+        DEBUG("pktbuf: allocated (new_pktsnip = %p) ", (void *)new_pktsnip);
+
+        if (new_pktsnip == NULL) {
+            DEBUG("=> failed\n");
+            return NULL;
+        }
+
+        DEBUG("of size %u\n", (unsigned)sizeof(ng_pktsnip_t));
+
         if ((size != 0) && (!_pktbuf_internal_contains(data))) {
             new_pktsnip->data = _pktbuf_internal_alloc(size);
-            DEBUG("pktbuf: allocated (new_pktsnip->data = %p) ", pkt->data);
+            DEBUG("pktbuf: allocated (new_pktsnip->data = %p) ", new_pktsnip->data);
 
             if (new_pktsnip->data == NULL) {
                 _pktbuf_internal_free(new_pktsnip);
@@ -258,6 +258,32 @@ static ng_pktsnip_t *_pktbuf_add_unsafe(ng_pktsnip_t *pkt, void *data,
             return NULL;
         }
 
+        if (size == pkt->size) {
+            DEBUG("pktbuf: size (%u) == pkt->size (%u) => just set new packet "
+                  "type and return\n", (unsigned)size, (unsigned)pkt->size);
+            pkt->type = type;
+            return pkt;
+        }
+
+        new_pktsnip = (ng_pktsnip_t *)_pktbuf_internal_alloc(sizeof(ng_pktsnip_t));
+        DEBUG("pktbuf: allocated (new_pktsnip = %p) ", (void *)new_pktsnip);
+
+        if (new_pktsnip == NULL) {
+            DEBUG("=> failed\n");
+            return NULL;
+        }
+
+        DEBUG("of size %u\n", (unsigned)sizeof(ng_pktsnip_t));
+        DEBUG("pktbuf: Adding chunk to %p ", pkt->data);
+
+        if (!_pktbuf_internal_add_pkt(pkt->data)) {
+            DEBUG("failed (freeing %p)\n", (void *)new_pktsnip);
+            _pktbuf_internal_free(new_pktsnip);
+
+            return NULL;
+        }
+
+        DEBUG("successful\n");
         new_pktsnip->next = pkt->next;
         new_pktsnip->data = data;
         DEBUG("pktbuf: set new_pktsnip->data = %p\n", new_pktsnip->data);
@@ -269,17 +295,6 @@ static ng_pktsnip_t *_pktbuf_add_unsafe(ng_pktsnip_t *pkt, void *data,
         DEBUG("pktbuf: resize pkt->size to %u\n", (unsigned)pkt->size);
         pkt->data = (void *)(((uint8_t *)pkt->data) + size);
         DEBUG("pktbuf: move pkt->data to %p\n", pkt->data);
-
-        DEBUG("pktbuf: Adding chunk to %p ", pkt->data);
-
-        if (!_pktbuf_internal_add_pkt(pkt->data)) {
-            DEBUG("failed (freeing %p)\n", (void *)new_pktsnip);
-            _pktbuf_internal_free(new_pktsnip);
-
-            return NULL;
-        }
-
-        DEBUG("successful\n");
     }
 
     new_pktsnip->size = size;

@@ -34,14 +34,9 @@
 #include "board.h"
 #include "thread.h"
 #include "kernel.h"
-#include "mutex.h"
-#include "ringbuffer.h"
 #include "irq.h"
-#include "periph/uart.h"
 
-#ifdef MODULE_UART0
-#include "board_uart0.h"
-#endif
+#include "uart_stdio.h"
 
 /**
  * @brief manage the heap
@@ -50,71 +45,12 @@ extern char _sheap;                 /* start of the heap */
 extern char _eheap;                 /* end of the heap */
 caddr_t heap_top = (caddr_t)&_sheap + 4;
 
-#ifndef MODULE_UART0
-/**
- * @brief use mutex for waiting on incoming UART chars
- */
-static mutex_t uart_rx_mutex = MUTEX_INIT;
-static char rx_buf_mem[STDIO_RX_BUFSIZE];
-static ringbuffer_t rx_buf;
-#endif
-
-#ifndef STDIO_TX_BUFSIZE
-#define STDIO_TX_BUFSIZE 4096
-#endif
-static char tx_buf_mem[STDIO_TX_BUFSIZE];
-static ringbuffer_t tx_buf;
-
-/**
- * @brief Receive a new character from the UART and put it into the receive buffer
- */
-void rx_cb(void *arg, char data)
-{
-    (void)arg;
-#ifndef MODULE_UART0
-    ringbuffer_add_one(&rx_buf, data);
-    mutex_unlock(&uart_rx_mutex);
-#else
-    if (uart0_handler_pid) {
-        uart0_handle_incoming(data);
-        uart0_notify_thread();
-    }
-#endif
-}
-
-static int tx_cb(void *arg)
-{
-    int ret;
-    char ch;
-    unsigned int intstat;
-
-    intstat = disableIRQ();
-
-    ret = ringbuffer_get_one(&tx_buf);
-    if (ret == -1) {
-        restoreIRQ(intstat);
-        return 0;
-    }
-
-    ch = (char) (ret & 0xff);
-    uart_write(STDIO, ch);
-
-    restoreIRQ(intstat);
-    return 1;
-}
-
 /**
  * @brief Initialize NewLib, called by __libc_init_array() from the startup script
  */
 void _init(void)
 {
-#ifndef MODULE_UART0
-    mutex_lock(&uart_rx_mutex);
-    ringbuffer_init(&rx_buf, rx_buf_mem, STDIO_RX_BUFSIZE);
-#endif
-    //uart_init(STDIO, STDIO_BAUDRATE, rx_cb, 0, 0);
-    ringbuffer_init(&tx_buf, tx_buf_mem, STDIO_TX_BUFSIZE);
-    uart_init(STDIO, STDIO_BAUDRATE, rx_cb, tx_cb, 0);
+    uart_stdio_init();
 }
 
 /**
@@ -136,7 +72,7 @@ void _fini(void)
 void _exit(int n)
 {
     printf("#! exit %i: resetting\n", n);
-    NVIC_SystemReset();
+    reboot(n);
     while(1);
 }
 
@@ -231,19 +167,9 @@ int _open_r(struct _reent *r, const char *name, int mode)
  */
 int _read_r(struct _reent *r, int fd, void *buffer, unsigned int count)
 {
-#ifndef MODULE_UART0
-    int res;
-    mutex_lock(&uart_rx_mutex);
-    unsigned state = disableIRQ();
-    count = count < rx_buf.avail ? count : rx_buf.avail;
-    res = ringbuffer_get(&rx_buf, (char*)buffer, count);
-    restoreIRQ(state);
-    return res;
-#else
-    char *res = (char*)buffer;
-    res[0] = (char)uart0_readc();
-    return 1;
-#endif
+    (void)r;
+    (void)fd;
+    return uart_stdio_read(buffer, count);
 }
 
 /**
@@ -263,40 +189,7 @@ int _read_r(struct _reent *r, int fd, void *buffer, unsigned int count)
  */
 int _write_r(struct _reent *r, int fd, const void *data, unsigned int count)
 {
-#if 0
-    (void) r;
-    (void) fd;
-    unsigned int i = 0;
-
-    while (i < count) {
-        char ch = ((char *) data)[i];
-
-        if (ch == '\n')
-            uart_write_blocking(STDIO, '\r');
-        uart_write_blocking(STDIO, ch);
-        i++;
-        //uart_write_blocking(STDIO, ((char*)data)[i++]);
-    }
-
-    return (int)i;
-#else
-    char *c = (char *) data;
-    unsigned int intstat;
-
-    intstat = disableIRQ();
-
-    for (int i = 0; i < count; i++) {
-        if (c[i] == '\n')
-            ringbuffer_add_one(&tx_buf, '\r');
-        ringbuffer_add_one(&tx_buf, c[i]);
-    }
-
-    uart_tx_begin(STDIO);
-
-    restoreIRQ(intstat);
-
-    return count;
-#endif
+    return uart_stdio_write(data, count);
 }
 
 /**

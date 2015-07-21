@@ -73,6 +73,14 @@ ifneq (,$(filter xbee,$(USEMODULE)))
   USEMODULE += ng_ieee802154
 endif
 
+ifneq (,$(filter ng_zep,$(USEMODULE)))
+  USEMODULE += hashes
+  USEMODULE += ng_ieee802154
+  USEMODULE += ng_udp
+  USEMODULE += random
+  USEMODULE += vtimer
+endif
+
 ifneq (,$(filter ng_ieee802154,$(USEMODULE)))
   ifneq (,$(filter ng_ipv6, $(USEMODULE)))
     USEMODULE += ng_sixlowpan
@@ -188,6 +196,14 @@ ifneq (,$(filter ng_udp,$(USEMODULE)))
   USEMODULE += ng_inet_csum
 endif
 
+ifneq (,$(filter ng_nettest,$(USEMODULE)))
+  USEMODULE += ng_netapi
+  USEMODULE += ng_netreg
+  USEMODULE += ng_netif
+  USEMODULE += ng_pktbuf
+  USEMODULE += vtimer
+endif
+
 ifneq (,$(filter ng_netbase,$(USEMODULE)))
   USEMODULE += ng_netapi
   USEMODULE += ng_netreg
@@ -210,6 +226,7 @@ ifneq (,$(filter aodvv2,$(USEMODULE)))
   USEMODULE += sixlowpan
   USEMODULE += oonf_common
   USEMODULE += oonf_rfc5444
+  USEMODULE += fib
 endif
 
 ifneq (,$(filter uart0,$(USEMODULE)))
@@ -308,4 +325,12 @@ ifneq (,$(filter cpp11-compat,$(USEMODULE)))
   USEMODULE += vtimer
   USEMODULE += timex
   FEATURES_REQUIRED += cpp
+endif
+
+ifneq (,$(filter newlib,$(USEMODULE)))
+  USEMODULE += uart_stdio
+endif
+
+ifneq (,$(filter hih6130,$(USEMODULE)))
+  USEMODULE += vtimer
 endif

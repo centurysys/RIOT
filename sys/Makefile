@@ -13,9 +13,6 @@ endif
 ifneq (,$(filter l2_ping,$(USEMODULE)))
     DIRS += net/link_layer/ping
 endif
-ifneq (,$(filter nomac,$(USEMODULE)))
-    DIRS += net/link_layer/nomac
-endif
 ifneq (,$(filter transport_layer,$(USEMODULE)))
     USEMODULE += udp
     USEMODULE += tcp
@@ -107,11 +104,17 @@ endif
 ifneq (,$(filter ng_netreg,$(USEMODULE)))
     DIRS += net/crosslayer/ng_netreg
 endif
+ifneq (,$(filter ng_nettest,$(USEMODULE)))
+    DIRS += net/crosslayer/ng_nettest
+endif
 ifneq (,$(filter ng_nomac,$(USEMODULE)))
     DIRS += net/link_layer/ng_nomac
 endif
 ifneq (,$(filter ng_pktbuf,$(USEMODULE)))
     DIRS += net/crosslayer/ng_pktbuf
+endif
+ifneq (,$(filter ng_zep,$(USEMODULE)))
+    DIRS += net/application_layer/ng_zep
 endif
 ifneq (,$(filter ng_rpl_srh,$(USEMODULE)))
     DIRS += net/routing/ng_rpl/srh
@@ -142,9 +145,6 @@ ifneq (,$(filter trickle,$(USEMODULE)))
 endif
 ifneq (,$(filter nhdp,$(USEMODULE)))
     DIRS += net/routing/nhdp
-endif
-ifneq (,$(filter ng_nomac,$(USEMODULE)))
-    DIRS += net/link_layer/ng_nomac
 endif
 ifneq (,$(filter ng_pktdump,$(USEMODULE)))
     DIRS += net/crosslayer/ng_pktdump

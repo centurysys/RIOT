@@ -97,6 +97,12 @@ static inline vtimer_t *node_get_timer(priority_queue_node_t *node)
 static int set_longterm(vtimer_t *timer)
 {
     timer->priority_queue_entry.priority = timer->absolute.seconds;
+    /* *** UGLY FIX BEGINS *** */
+    /* Workaround for a bug in a so far undiscovered location which causes the
+     * vtimer to add the same timer twice, locking the system in an infinite
+     * loop inside priority_queue_add. */
+    priority_queue_remove(&longterm_priority_queue_root, timer_get_node(timer));
+    /* *** UGLY FIX ENDS *** */
     priority_queue_add(&longterm_priority_queue_root, timer_get_node(timer));
     return 0;
 }
@@ -136,8 +142,8 @@ static int update_shortterm(void)
     }
 
     DEBUG("update_shortterm: Set hwtimer to %" PRIu32 " (now=%lu)\n", next, now);
-    uint32_t next_ticks = now_ticks + HWTIMER_TICKS(next - now);
-    hwtimer_id = hwtimer_set_absolute(next_ticks, vtimer_callback, NULL);
+    unsigned long offset_ticks = (unsigned long)HWTIMER_TICKS(next - now);
+    hwtimer_id = hwtimer_set(offset_ticks, vtimer_callback, NULL);
 
     return 0;
 }
@@ -189,6 +195,12 @@ static int set_shortterm(vtimer_t *timer)
 {
     DEBUG("set_shortterm(): Absolute: %" PRIu32 " %" PRIu32 "\n", timer->absolute.seconds, timer->absolute.microseconds);
     timer->priority_queue_entry.priority = timer->absolute.microseconds;
+    /* *** UGLY FIX BEGINS *** */
+    /* Workaround for a bug in a so far undiscovered location which causes the
+     * vtimer to add the same timer twice, locking the system in an infinite
+     * loop inside priority_queue_add. */
+    priority_queue_remove(&shortterm_priority_queue_root, timer_get_node(timer));
+    /* *** UGLY FIX ENDS *** */
     priority_queue_add(&shortterm_priority_queue_root, timer_get_node(timer));
     return 1;
 }
@@ -308,11 +320,10 @@ void vtimer_get_localtime(struct tm *localt)
     timex_t now;
     vtimer_now(&now);
 
+    memset(localt, 0, sizeof(struct tm));
     localt->tm_sec = now.seconds % 60;
     localt->tm_min = (now.seconds / 60) % 60;
     localt->tm_hour = (now.seconds / 60 / 60) % 24;
-
-    // TODO: fill the other fields
 }
 
 void vtimer_init(void)

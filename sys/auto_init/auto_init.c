@@ -112,6 +112,10 @@
 #include "dev_eth_autoinit.h"
 #endif
 
+#ifdef MODULE_FIB
+#include "net/ng_fib.h"
+#endif
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -243,9 +247,11 @@ void auto_init(void)
     DEBUG("Auto init vtimer module.\n");
     vtimer_init();
 #endif
+#ifndef MODULE_UART_STDIO
 #ifdef MODULE_UART0
     DEBUG("Auto init uart0 module.\n");
     board_uart0_init();
+#endif
 #endif
 #ifdef MODULE_RTC
     DEBUG("Auto init rtc module.\n");
@@ -317,6 +323,10 @@ void auto_init(void)
 #ifdef MODULE_NG_UDP
     DEBUG("Auto init UDP module.\n");
     ng_udp_init();
+#endif
+#ifdef MODULE_FIB
+    DEBUG("Auto init FIB module.\n");
+    fib_init();
 #endif
 
 

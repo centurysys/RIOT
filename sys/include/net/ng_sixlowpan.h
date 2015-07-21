@@ -32,14 +32,14 @@ extern "C" {
 #endif
 
 /**
- * @brief   Default stack size to use for the 6LoWPAN thread
+ * @brief   Default stack size to use for the 6LoWPAN thread.
  */
 #ifndef NG_SIXLOWPAN_STACK_SIZE
 #define NG_SIXLOWPAN_STACK_SIZE  (THREAD_STACKSIZE_DEFAULT)
 #endif
 
 /**
- * @brief   Default priority for the 6LoWPAN thread
+ * @brief   Default priority for the 6LoWPAN thread.
  */
 #ifndef NG_SIXLOWPAN_PRIO
 #define NG_SIXLOWPAN_PRIO   (THREAD_PRIORITY_MAIN - 4)
@@ -58,7 +58,7 @@ extern "C" {
 #define NG_SIXLOWPAN_UNCOMPRESSED   (0x41)
 
 /**
- * @brief   Checks if dispatch indicats that fram is not a 6LoWPAN (NALP) frame.
+ * @brief   Checks if dispatch indicates that frame is not a 6LoWPAN (NALP) frame.
  *
  * @param[in] disp  The first byte of a frame.
  *
@@ -73,8 +73,13 @@ static inline bool ng_sixlowpan_nalp(uint8_t disp)
 /**
  * @brief   Initialization of the 6LoWPAN thread.
  *
+ * @details If 6LoWPAN was already initialized, it will just return the PID of
+ *          the 6LoWPAN thread.
+ *
  * @return  The PID to the 6LoWPAN thread, on success.
- * @return  -EOVERFLOW, if there are too many threads running already
+ * @return  -EINVAL, if @ref NG_SIXLOWPAN_PRIO was greater than or equal to
+ *          @ref SCHED_PRIO_LEVELS
+ * @return  -EOVERFLOW, if there are too many threads running already in general
  */
 kernel_pid_t ng_sixlowpan_init(void);
 

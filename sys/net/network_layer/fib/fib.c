@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <errno.h>
 #include "thread.h"
 #include "mutex.h"
@@ -313,13 +314,14 @@ static int fib_signal_rp(uint8_t *dst, size_t dst_size, uint32_t dst_flags)
                   msg.content.ptr, (int)i, (int)notify_rp[i]);
 
             /* do only signal a RP if its registered prefix matches */
-            if (universal_address_compare(prefix_rp[i], dst, &dst_size) == 0) {
+            size_t dst_size_in_bits = dst_size<<3;
+            if (universal_address_compare(prefix_rp[i], dst, &dst_size_in_bits) == 1) {
                 /* the receiver, i.e. the RP, MUST copy the content value.
                  * using the provided pointer after replying this message
                  * will lead to errors
                  */
                 msg_send_receive(&msg, &reply, notify_rp[i]);
-                DEBUG("[fib_signal_rp] got reply.");
+                DEBUG("[fib_signal_rp] got reply.\n");
             }
         }
     }
@@ -332,9 +334,15 @@ int fib_add_entry(kernel_pid_t iface_id, uint8_t *dst, size_t dst_size, uint32_t
                   uint32_t lifetime)
 {
     mutex_lock(&mtx_access);
-    DEBUG("[fib_add_entry]");
+    DEBUG("[fib_add_entry]\n");
     size_t count = 1;
     fib_entry_t *entry[count];
+
+    /* check if dst and next_hop are valid pointers */
+    if ((dst == NULL) || (next_hop == NULL)) {
+        mutex_unlock(&mtx_access);
+        return -EFAULT;
+    }
 
     int ret = fib_find_entry(dst, dst_size, &(entry[0]), &count);
 
@@ -356,10 +364,16 @@ int fib_update_entry(uint8_t *dst, size_t dst_size,
                      uint32_t lifetime)
 {
     mutex_lock(&mtx_access);
-    DEBUG("[fib_update_entry]");
+    DEBUG("[fib_update_entry]\n");
     size_t count = 1;
     fib_entry_t *entry[count];
     int ret = -ENOMEM;
+
+    /* check if dst and next_hop are valid pointers */
+    if ((dst == NULL) || (next_hop == NULL)) {
+        mutex_unlock(&mtx_access);
+        return -EFAULT;
+    }
 
     if (fib_find_entry(dst, dst_size, &(entry[0]), &count) == 1) {
         DEBUG("[fib_update_entry] found entry: %p\n", (void *)(entry[0]));
@@ -370,7 +384,7 @@ int fib_update_entry(uint8_t *dst, size_t dst_size,
         /* we have ambiguous entries, i.e. count > 1
          * this should never happen
          */
-        DEBUG("[fib_update_entry] ambigious entries detected!!!");
+        DEBUG("[fib_update_entry] ambigious entries detected!!!\n");
     }
 
     mutex_unlock(&mtx_access);
@@ -380,7 +394,7 @@ int fib_update_entry(uint8_t *dst, size_t dst_size,
 void fib_remove_entry(uint8_t *dst, size_t dst_size)
 {
     mutex_lock(&mtx_access);
-    DEBUG("[fib_remove_entry]");
+    DEBUG("[fib_remove_entry]\n");
     size_t count = 1;
     fib_entry_t *entry[count];
 
@@ -394,7 +408,7 @@ void fib_remove_entry(uint8_t *dst, size_t dst_size)
         /* we have ambiguous entries, i.e. count > 1
          * this should never happen
          */
-        DEBUG("[fib_update_entry] ambigious entries detected!!!");
+        DEBUG("[fib_update_entry] ambigious entries detected!!!\n");
     }
 
     mutex_unlock(&mtx_access);
@@ -405,9 +419,21 @@ int fib_get_next_hop(kernel_pid_t *iface_id,
                      uint8_t *dst, size_t dst_size, uint32_t dst_flags)
 {
     mutex_lock(&mtx_access);
-    DEBUG("[fib_get_next_hop]");
+    DEBUG("[fib_get_next_hop]\n");
     size_t count = 1;
     fib_entry_t *entry[count];
+
+    if ((iface_id == NULL)
+        || (next_hop_size == NULL)
+        || (next_hop_flags == NULL)) {
+            mutex_unlock(&mtx_access);
+            return -EINVAL;
+        }
+
+    if ((dst == NULL) || (next_hop == NULL)) {
+        mutex_unlock(&mtx_access);
+        return -EFAULT;
+    }
 
     int ret = fib_find_entry(dst, dst_size, &(entry[0]), &count);
     if (!(ret == 0 || ret == 1)) {
@@ -476,7 +502,7 @@ int fib_get_destination_set(uint8_t *prefix, size_t prefix_size,
 
 void fib_init(void)
 {
-    DEBUG("[fib_init] hello. Initializing some stuff.");
+    DEBUG("[fib_init] hello. Initializing some stuff.\n");
     mutex_lock(&mtx_access);
 
     for (size_t i = 0; i < FIB_MAX_REGISTERED_RP; ++i) {
@@ -500,7 +526,7 @@ void fib_init(void)
 
 void fib_deinit(void)
 {
-    DEBUG("[fib_deinit] hello. De-Initializing stuff.");
+    DEBUG("[fib_deinit] hello. De-Initializing stuff.\n");
     mutex_lock(&mtx_access);
 
     for (size_t i = 0; i < FIB_MAX_REGISTERED_RP; ++i) {

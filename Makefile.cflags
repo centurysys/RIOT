@@ -43,6 +43,7 @@ endif
 CXXUWFLAGS += -std=%
 
 ifeq ($(LTO),yes)
+  $(info Building with Link-Time-Optimizations is currently an experimental feature. Expect broken binaries.)
   LTOFLAGS = -flto -ffat-lto-objects
   CFLAGS += ${LTOFLAGS}
   LINKFLAGS += ${LTOFLAGS}
@@ -50,6 +51,9 @@ endif
 
 # Forbid common symbols to prevent accidental aliasing.
 CFLAGS += -fno-common
+
+# Enable all default warnings
+CFLAGS += -Wall
 
 # Default ARFLAGS for platforms which do not specify it.
 # Note: make by default provides ARFLAGS=rv which we want to override

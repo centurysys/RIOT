@@ -285,19 +285,28 @@ static int _fill_ipv6_hdr(kernel_pid_t iface, ng_pktsnip_t *ipv6,
     DEBUG("ipv6: set next header to %" PRIu8 "\n", hdr->nh);
 
     if (hdr->hl == 0) {
-        hdr->hl = ng_ipv6_netif_get(iface)->cur_hl;
+        if (iface == KERNEL_PID_UNDEF) {
+            hdr->hl = NG_IPV6_NETIF_DEFAULT_HL;
+        }
+        else {
+            hdr->hl = ng_ipv6_netif_get(iface)->cur_hl;
+        }
     }
 
     if (ng_ipv6_addr_is_unspecified(&hdr->src)) {
-        ng_ipv6_addr_t *src = ng_ipv6_netif_find_best_src_addr(iface, &hdr->dst);
-
-        if (src != NULL) {
-            DEBUG("ipv6: set packet source to %s\n",
-                  ng_ipv6_addr_to_str(addr_str, src, sizeof(addr_str)));
-            memcpy(&hdr->src, src, sizeof(ng_ipv6_addr_t));
+        if (ng_ipv6_addr_is_loopback(&hdr->dst)) {
+            ng_ipv6_addr_set_loopback(&hdr->src);
         }
+        else {
+            ng_ipv6_addr_t *src = ng_ipv6_netif_find_best_src_addr(iface, &hdr->dst);
 
-        /* Otherwise leave unspecified */
+            if (src != NULL) {
+                DEBUG("ipv6: set packet source to %s\n",
+                      ng_ipv6_addr_to_str(addr_str, src, sizeof(addr_str)));
+                memcpy(&hdr->src, src, sizeof(ng_ipv6_addr_t));
+            }
+            /* Otherwise leave unspecified */
+        }
     }
 
     DEBUG("ipv6: calculate checksum for upper header.\n");
@@ -308,7 +317,8 @@ static int _fill_ipv6_hdr(kernel_pid_t iface, ng_pktsnip_t *ipv6,
 
         /* We deal with multiple interfaces here (multicast) => possible
          * different source addresses => duplication of payload needed */
-        while (ptr != payload) {
+        while (ptr != payload->next) {
+            ng_pktsnip_t *old = ptr->next;
             /* duplicate everything including payload */
             ptr->next = ng_pktbuf_start_write(ptr->next);
 
@@ -317,7 +327,7 @@ static int _fill_ipv6_hdr(kernel_pid_t iface, ng_pktsnip_t *ipv6,
                 return -ENOBUFS;
             }
 
-            ptr = ptr->next;
+            ptr = old;
         }
     }
 #endif /* NG_NETIF_NUMOF */
@@ -348,10 +358,11 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
 {
     ng_pktsnip_t *netif;
     kernel_pid_t ifs[NG_NETIF_NUMOF];
+    size_t ifnum = 0;
 
     if (iface == KERNEL_PID_UNDEF) {
         /* get list of interfaces */
-        size_t ifnum = ng_netif_get(ifs);
+        ifnum = ng_netif_get(ifs);
 
         /* throw away packet if no one is interested */
         if (ifnum == 0) {
@@ -400,7 +411,7 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
 
             LL_PREPEND(pkt, netif);
 
-            _send_multicast_over_iface(iface, pkt, netif);
+            _send_multicast_over_iface(ifs[i], pkt, netif);
         }
     }
     else {
@@ -418,6 +429,7 @@ static void _send_multicast(kernel_pid_t iface, ng_pktsnip_t *pkt,
         _send_multicast_over_iface(iface, pkt, netif);
     }
 #else   /* NG_NETIF_NUMOF */
+    (void)ifnum; /* not used in this build branch */
     if (iface == KERNEL_PID_UNDEF) {
         iface = ifs[0];
 
@@ -453,6 +465,7 @@ static void _send(ng_pktsnip_t *pkt, bool prep_hdr)
 {
     kernel_pid_t iface = KERNEL_PID_UNDEF;
     ng_pktsnip_t *ipv6, *payload;
+    ng_ipv6_addr_t *tmp;
     ng_ipv6_hdr_t *hdr;
     /* seize payload as temporary variable */
     payload = ng_pktbuf_start_write(pkt);
@@ -477,10 +490,49 @@ static void _send(ng_pktsnip_t *pkt, bool prep_hdr)
     }
 
     hdr = ipv6->data;
-    payload = ipv6->next;       /* TODO: parse extension headers */
+    payload = ipv6->next;
 
     if (ng_ipv6_addr_is_multicast(&hdr->dst)) {
         _send_multicast(iface, pkt, ipv6, payload, prep_hdr);
+    }
+    else if ((ng_ipv6_addr_is_loopback(&hdr->dst)) ||   /* dst is loopback address */
+             ((iface == KERNEL_PID_UNDEF) && /* or dst registered to any local interface */
+              ((iface = ng_ipv6_netif_find_by_addr(&tmp, &hdr->dst)) != KERNEL_PID_UNDEF)) ||
+             ((iface != KERNEL_PID_UNDEF) && /* or dst registered to given interface */
+              (ng_ipv6_netif_find_addr(iface, &hdr->dst) != NULL))) {
+        uint8_t *rcv_data;
+        ng_pktsnip_t *ptr = ipv6, *rcv_pkt;
+
+        if (prep_hdr) {
+            if (_fill_ipv6_hdr(iface, ipv6, payload) < 0) {
+                /* error on filling up header */
+                ng_pktbuf_release(pkt);
+                return;
+            }
+        }
+
+        rcv_pkt = ng_pktbuf_add(NULL, NULL, ng_pkt_len(ipv6), NG_NETTYPE_IPV6);
+
+        if (rcv_pkt == NULL) {
+            DEBUG("ipv6: error on generating loopback packet\n");
+            ng_pktbuf_release(pkt);
+            return;
+        }
+
+        rcv_data = rcv_pkt->data;
+
+        /* "reverse" packet (by making it one snip as if received from NIC) */
+        while (ptr != NULL) {
+            memcpy(rcv_data, ptr->data, ptr->size);
+            rcv_data += ptr->size;
+            ptr = ptr->next;
+        }
+
+        ng_pktbuf_release(pkt);
+
+        DEBUG("ipv6: packet is addressed to myself => loopback\n");
+
+        ng_netapi_receive(ng_ipv6_pid, rcv_pkt);
     }
     else {
         uint8_t l2addr_len = NG_IPV6_NC_L2_ADDR_MAX;
@@ -510,7 +562,10 @@ static void _send(ng_pktsnip_t *pkt, bool prep_hdr)
 /* functions for receiving */
 static inline bool _pkt_not_for_me(kernel_pid_t *iface, ng_ipv6_hdr_t *hdr)
 {
-    if (*iface == KERNEL_PID_UNDEF) {
+    if (ng_ipv6_addr_is_loopback(&hdr->dst)) {
+        return false;
+    }
+    else if (*iface == KERNEL_PID_UNDEF) {
         *iface = ng_ipv6_netif_find_by_addr(NULL, &hdr->dst);
         return (*iface == KERNEL_PID_UNDEF);
     }

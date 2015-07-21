@@ -25,6 +25,11 @@
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
+#if ENABLE_DEBUG
+/* For PRIu16 etc. */
+#include <inttypes.h>
+#endif
+
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
 
 #if ENABLE_DEBUG
@@ -35,9 +40,9 @@ static char _stack[NG_SIXLOWPAN_STACK_SIZE];
 
 
 /* handles NG_NETAPI_MSG_TYPE_RCV commands */
-void _receive(ng_pktsnip_t *pkt);
+static void _receive(ng_pktsnip_t *pkt);
 /* handles NG_NETAPI_MSG_TYPE_SND commands */
-void _send(ng_pktsnip_t *pkt);
+static void _send(ng_pktsnip_t *pkt);
 /* Main event loop for 6LoWPAN */
 static void *_event_loop(void *args);
 
@@ -53,11 +58,10 @@ kernel_pid_t ng_sixlowpan_init(void)
     return _pid;
 }
 
-void _receive(ng_pktsnip_t *pkt)
+static void _receive(ng_pktsnip_t *pkt)
 {
     ng_pktsnip_t *payload;
     uint8_t *dispatch;
-    ng_netreg_entry_t *entry;
 
     /* seize payload as a temporary variable */
     payload = ng_pktbuf_start_write(pkt);   /* need to duplicate since pkt->next
@@ -117,46 +121,32 @@ void _receive(ng_pktsnip_t *pkt)
         return;
     }
 #endif
-    else {
-        DEBUG("6lo: dispatch %02x ... is not supported\n",
-              dispatch[0]);
-        ng_pktbuf_release(pkt);
-        return;
-    }
-
 #ifdef MODULE_NG_SIXLOWPAN_IPHC
-    if (ng_sixlowpan_iphc_is(payload->data)) {
+    else if (ng_sixlowpan_iphc_is(dispatch)) {
         if (!ng_sixlowpan_iphc_decode(pkt)) {
             DEBUG("6lo: error on IPHC decoding\n");
             ng_pktbuf_release(pkt);
             return;
         }
         LL_SEARCH_SCALAR(pkt, payload, type, NG_NETTYPE_IPV6);
-
     }
 #endif
-
-    payload->type = NG_NETTYPE_IPV6;
-
-    entry = ng_netreg_lookup(NG_NETTYPE_IPV6, NG_NETREG_DEMUX_CTX_ALL);
-
-    if (entry == NULL) {
-        DEBUG("ipv6: No receivers for this packet found\n");
+    else {
+        DEBUG("6lo: dispatch %02" PRIx8 " ... is not supported\n",
+              dispatch[0]);
         ng_pktbuf_release(pkt);
         return;
     }
 
-    ng_pktbuf_hold(pkt, ng_netreg_num(NG_NETTYPE_IPV6, NG_NETREG_DEMUX_CTX_ALL) - 1);
+    payload->type = NG_NETTYPE_IPV6;
 
-    while (entry) {
-        DEBUG("6lo: Send receive command for %p to %" PRIu16 "\n",
-              (void *)pkt, entry->pid);
-        ng_netapi_receive(entry->pid, pkt);
-        entry = ng_netreg_getnext(entry);
+    if (!ng_netapi_dispatch_receive(NG_NETTYPE_IPV6, NG_NETREG_DEMUX_CTX_ALL, pkt)) {
+        DEBUG("ipv6: No receivers for this packet found\n");
+        ng_pktbuf_release(pkt);
     }
 }
 
-void _send(ng_pktsnip_t *pkt)
+static void _send(ng_pktsnip_t *pkt)
 {
     ng_netif_hdr_t *hdr;
     ng_pktsnip_t *ipv6, *sixlowpan;
