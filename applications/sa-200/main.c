@@ -24,10 +24,12 @@ static int shell_readc(void)
     return c;
 }
 
-static void shell_putchar(int c)
+static int shell_putchar(int c)
 {
     putchar(c);
     fflush(0);
+
+    return 1;
 }
 
 int main(void)
