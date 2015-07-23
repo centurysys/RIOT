@@ -17,6 +17,8 @@
  * @}
  */
 
+
+#include "net/eui64.h"
 #include "net/ng_ieee802154.h"
 #include "net/ng_netbase.h"
 #include "ng_ml7396.h"
@@ -419,6 +421,20 @@ static int _get(ng_netdev_t *device, ng_netconf_opt_t opt,
             }
             *((uint16_t *) val) = dev->pan;
             return sizeof(uint16_t);
+
+        case NETCONF_OPT_IPV6_IID:
+              if (max_len < sizeof(eui64_t)) {
+                  return -EOVERFLOW;
+              }
+              if (dev->options & NG_ML7396_OPT_SRC_ADDR_LONG) {
+                  uint64_t addr = ng_ml7396_get_addr_long(dev);
+                  ng_ieee802154_get_iid(val, (uint8_t *)&addr, 8);
+              }
+              else {
+                  uint16_t addr = ng_ml7396_get_addr_short(dev);
+                  ng_ieee802154_get_iid(val, (uint8_t *)&addr, 2);
+              }
+              return sizeof(eui64_t);
 
         case NETCONF_OPT_PROTO:
             if (max_len < sizeof(ng_nettype_t)) {
