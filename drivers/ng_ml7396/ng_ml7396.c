@@ -32,9 +32,16 @@
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_netdev.h"
 #include "ng_ml7396_tx.h"
+#include "ng_ml7396_irq.h"
 
-#define ENABLE_DEBUG (0)
+#include "crc.h"
+
+#define ENABLE_DEBUG (1)
 #include "debug.h"
+
+#if ENABLE_DEBUG
+static ng_ml7396_t *dev_debug;
+#endif
 
 /* CSMA parameters */
 static const uint32_t aUnitBackoffPeriod = 1130;
@@ -178,9 +185,11 @@ static void _irq_handler(void *arg)
     msg_t msg;
     ng_ml7396_t *dev = (ng_ml7396_t *) arg;
 
+    DEBUG("** IRQ, mac_pid = %d\n", dev->irq_pid);
+
     /* tell driver thread about the interrupt */
     msg.type = NG_NETDEV_MSG_TYPE_EVENT;
-    msg_send(&msg, dev->mac_pid);
+    msg_send(&msg, dev->irq_pid);
 }
 
 static void _ng_ml7396_spi_init(ng_ml7396_t *dev, spi_speed_t spi_speed)
@@ -194,11 +203,11 @@ static void _ng_ml7396_spi_init(ng_ml7396_t *dev, spi_speed_t spi_speed)
         return;
     }
 
-    gpio_init_out(dev->cs_pin, GPIO_PULLUP);
-    gpio_init_out(dev->reset_pin, GPIO_PULLUP);
+    gpio_init(dev->cs_pin, GPIO_DIR_OUT, GPIO_PULLUP);
+    gpio_init(dev->reset_pin, GPIO_DIR_OUT, GPIO_PULLUP);
 
     if (dev->tcxo_pin) {
-        gpio_init_out(dev->tcxo_pin, GPIO_PULLUP);
+        gpio_init(dev->tcxo_pin, GPIO_DIR_OUT, GPIO_PULLUP);
         gpio_clear(dev->tcxo_pin);
     }
 }
@@ -376,12 +385,18 @@ int ng_ml7396_init(ng_ml7396_t *dev, spi_t spi, spi_speed_t spi_speed,
     /* create TX thread */
     ng_ml7396_tx_init(dev);
 
+    /* create IRQ-BH thread */
+    ng_ml7396_irq_init(dev);
+
     /* initialize SPI, GPIOs */
     _ng_ml7396_spi_init(dev, spi_speed);
     _ng_ml7396_gpio_interrupt_init(dev);
 
-    /* reset device to default values and put it into RX state */
-    ng_ml7396_reset(dev);
+    //ng_ml7396_reset(dev);
+
+#if ENABLE_DEBUG
+    dev_debug = dev;
+#endif
 
     return 0;
 }
@@ -400,7 +415,27 @@ void ng_ml7396_reset(ng_ml7396_t *dev)
     _ng_ml7396_clk_init(dev);
     _ng_ml7396_rf_init(dev);
 
-    ng_ml7396_set_chan(dev, 33);
+    /* set default address */
+    ng_ml7396_set_addr_long(dev, NG_ML7396_DEFAULT_ADDR_LONG);
+    ng_ml7396_set_addr_short(dev, NG_ML7396_DEFAULT_ADDR_SHORT);
+
+    /* use long address default */
+    ng_ml7396_set_option(dev, NG_ML7396_OPT_SRC_ADDR_LONG, true);
+
+    /* set default PAN id */
+    ng_ml7396_set_pan(dev, NG_ML7396_DEFAULT_PANID);
+
+    /* set default channel */
+    ng_ml7396_set_chan(dev, NG_ML7396_DEFAULT_CHANNEL);
+
+    /* set default protocol */
+#ifdef MODULE_NG_SIXLOWPAN
+    dev->proto = NG_NETTYPE_SIXLOWPAN;
+#else
+    dev->proto = NG_NETTYPE_UNDEF;
+#endif
+
+    dev->max_retries = 1;
 
     ng_ml7396_switch_to_rx(dev);
 }
@@ -452,6 +487,8 @@ bool ng_ml7396_cca(ng_ml7396_t *dev)
     return result;
 }
 
+extern void dump_buffer(char *buf, size_t len);
+
 size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
     ng_pktsnip_t *pkt;
@@ -475,10 +512,14 @@ size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len)
 
 size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
 {
-    ng_pktsnip_t *snip;
+    ng_pktsnip_t *snip, *snip_tmp;
     uint8_t mhr[NG_IEEE802154_MAX_HDR_LEN];
-    size_t len;
+    uint16_t crc;
+    size_t len, trim;
     int res;
+
+    printf("%s: pkt: %p, pkt->data: %p\n", __FUNCTION__, pkt, pkt->data);
+    usleep(100 * 1000);
 
     /* create 802.15.4 header */
     len = _make_data_frame_hdr(dev, mhr, (ng_netif_hdr_t *) pkt->data);
@@ -498,6 +539,17 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
         goto ret;
     }
 
+    /* generate CRC */
+    snip_tmp = snip;
+    crc = crc_ccitt(0, mhr, len);
+    dump_buffer(mhr, len);
+
+    while (snip_tmp) {
+        dump_buffer(snip_tmp->data, snip_tmp->size);
+        crc = crc_ccitt(crc, snip_tmp->data, snip_tmp->size);
+        snip_tmp = snip_tmp->next;
+    }
+
     _ng_ml7396_backoff(dev);
 
     res = ng_ml7396_tx_prepare(dev);
@@ -506,26 +558,35 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
         uint8_t phy_hdr[2];
 
         phy_hdr[0] = 0x10;
-        phy_hdr[1] = ng_pkt_len(snip) + len;
+        phy_hdr[1] = ng_pkt_len(snip) + len + 2;
 
+        /* load PHY header to FIFO */
         ng_ml7396_tx_load(dev, phy_hdr, 2);
 
+        /* load MAC header */
         ng_ml7396_tx_load(dev, mhr, len);
 
         snip = pkt->next;
 
+        /* load payload */
         while (snip) {
             ng_ml7396_tx_load(dev, snip->data, snip->size);
             len += snip->size;
             snip = snip->next;
         }
 
+        /* load CRC */
+        ng_ml7396_tx_load(dev, (uint8_t *) &crc, sizeof(crc));
+
         res = ng_ml7396_tx_exec(dev);
+        printf("%s: tx_exec -> %d\n", __FUNCTION__, res);
     }
 
     if (res != 0) {
         len = -ETIMEDOUT;
     }
+
+    ng_ml7396_switch_to_rx(dev);
 
 ret:
     return len;
@@ -581,8 +642,12 @@ int ng_ml7396_tx_prepare(ng_ml7396_t *dev)
     return 0;
 }
 
+
 size_t ng_ml7396_tx_load(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
+    printf("%s: len: %d\n", __FUNCTION__, len);
+    dump_buffer(data, len);
+
     ng_ml7396_fifo_writes(dev, data, len);
 
     return len;
@@ -590,6 +655,8 @@ size_t ng_ml7396_tx_load(ng_ml7396_t *dev, uint8_t *data, size_t len)
 
 int ng_ml7396_tx_exec(ng_ml7396_t *dev)
 {
+    int res;
+    uint32_t status;
     uint8_t reg;
 
     reg = ng_ml7396_reg_read(dev, ML7396_REG_RF_STATUS);
@@ -600,7 +667,17 @@ int ng_ml7396_tx_exec(ng_ml7396_t *dev)
     ng_ml7396_clear_interrupts(dev, INT_RFSTAT_CHANGE);
     ng_ml7396_reg_write(dev, ML7396_REG_RF_STATUS, SET_TX_ON);
 
-    return _ng_ml7396_wait_rf_stat_poll(dev, STAT_TX_ON);
+    res = _ng_ml7396_wait_rf_stat_poll(dev, STAT_TX_ON);
+
+    status = ng_ml7396_get_interrupt_status(dev);
+    status &= (INT_TXFIFO0_DONE | INT_TXFIFO1_DONE |
+               INT_TXFIFO0_REQ | INT_TXFIFO1_REQ |
+               INT_RFSTAT_CHANGE);
+
+    ng_ml7396_clear_interrupts(dev, status);
+    ng_ml7396_reg_write(dev, ML7396_REG_INT_PD_DATA_REQ, 0x00);
+
+    return res;
 }
 
 int ng_ml7396_switch_to_rx(ng_ml7396_t *dev)
@@ -622,3 +699,56 @@ void ng_ml7396_rx_read(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
     ng_ml7396_fifo_reads(dev, data, len);
 }
+
+
+/* debug functions */
+#if ENABLE_DEBUG
+
+static void _debug_dump_buffer(char *buf, size_t len)
+{
+    int i;
+
+    for (i = 0; i < len; i++) {
+        if ((i % 16) == 0) {
+            printf("%04x:", i);
+        }
+
+        printf(" %02x", buf[i]);
+
+        if ((i % 16) == 15) {
+            puts("");
+        }
+    }
+
+    if ((i % 16) != 0) {
+        puts("");
+    }
+}
+
+#define REGADDR_MAX (0x7e)
+
+void ng_ml7396_regdump(int bank)
+{
+    int i;
+    char buf[REGADDR_MAX];
+
+    if (!dev_debug) {
+        return;
+    }
+
+    if (bank < 0 || bank > 2) {
+        DEBUG("%s: invalid bank no. (%d)\n", __FUNCTION__, bank);
+        return;
+    }
+
+    ng_ml7396_reg_reads(dev_debug, ((uint16_t) (bank | 0x80)) << 8, buf, REGADDR_MAX);
+
+    DEBUG("-- ML7396B Bank: %d --\n", bank);
+    _debug_dump_buffer(buf, REGADDR_MAX);
+}
+#else
+void ng_ml7396_regdump(int bank)
+{
+
+}
+#endif

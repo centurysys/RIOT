@@ -32,7 +32,7 @@
 #define NG_ML7396_TX_STACKSIZE (THREAD_STACKSIZE_DEFAULT)
 #define NG_ML7396_TX_PRIO      (THREAD_PRIORITY_MAIN - 3)
 
-static kernel_pid_t _ml7396_tx_thread_pid = KERNEL_PID_UNDEF;
+//static kernel_pid_t _ml7396_tx_thread_pid = KERNEL_PID_UNDEF;
 static char _ml7396_tx_stack[NG_ML7396_TX_STACKSIZE];
 
 
@@ -43,7 +43,7 @@ static int _ng_ml7396_wait_ack(ng_ml7396_t *dev, uint8_t seq_nr_expected)
     msg_t msg;
 
     timeout.seconds = 0;
-    timeout.microseconds = 10 * 1000;
+    timeout.microseconds = 100 * 1000;
 
     res = vtimer_msg_receive_timeout(&msg, timeout);
 
@@ -61,11 +61,14 @@ static int _ng_ml7396_wait_ack(ng_ml7396_t *dev, uint8_t seq_nr_expected)
         }
     }
     else {
+        puts("ACK timeouted.");
         /* ACK timeouted. */
     }
 
     return -1;
 }
+
+extern void ps(void);
 
 static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
 {
@@ -79,18 +82,24 @@ static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
     retry = dev->max_retries;
 
     for (i = 0; i < retry; i++) {
+        puts("1");
         sent = ng_ml7396_send_pkt(dev, pkt);
+        puts("2");
 
         if (sent > 0) {
+            puts("3");
             if (_ng_ml7396_wait_ack(dev, dev->seq_nr) == 0) {
+                puts("4");
                 break;
             }
             else {
+                puts("5");
                 sent = -ETIMEDOUT;
             }
         }
     }
 
+    puts("6");
     ng_pktbuf_release(pkt);
 
     msg->content.value = (uint32_t) sent;
@@ -108,6 +117,7 @@ static void *_ng_ml7396_tx_thread(void *args)
 
         switch (msg.type) {
             case NG_NETAPI_MSG_TYPE_SND:
+                printf("%s: NG_NETAPI_MSG_TYPE_SND received.\n", __FUNCTION__);
                 _ng_ml7396_send(dev, &msg);
                 break;
 
@@ -128,16 +138,17 @@ kernel_pid_t ng_ml7396_tx_init(ng_ml7396_t *dev)
         return -ENODEV;
     }
 
-    if (_ml7396_tx_thread_pid == KERNEL_PID_UNDEF) {
+    if (dev->tx_pid == KERNEL_PID_UNDEF) {
         pid = thread_create(_ml7396_tx_stack,
                             NG_ML7396_TX_STACKSIZE, NG_ML7396_TX_PRIO,
                             CREATE_STACKTEST | CREATE_SLEEPING,
                             _ng_ml7396_tx_thread,
                             (void *) dev,
                             "ng_ml7396_tx");
-        _ml7396_tx_thread_pid = pid;
+        dev->tx_pid = pid;
+        printf("%s: tx_pid = %d\n", __FUNCTION__, dev->tx_pid);
         thread_wakeup(pid);
     }
 
-    return _ml7396_tx_thread_pid;
+    return dev->tx_pid;
 }

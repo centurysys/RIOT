@@ -55,7 +55,7 @@ extern "C" {
   */
 #define NG_ML7396_MIN_CHANNEL        (33)
 #define NG_ML7396_MAX_CHANNEL        (59)
-#define NG_ML7396_DEFAULT_CHANNEL    (5)
+#define NG_ML7396_DEFAULT_CHANNEL    (33)
 /** @} */
 
 /**
@@ -63,7 +63,7 @@ extern "C" {
  *
  * TODO: Read some global network stack specific configuration value
  */
-#define NG_ML7396_DEFAULT_PANID      (0x0023)
+#define NG_ML7396_DEFAULT_PANID      (0x1234)
 
 /**
  * @brief   Default TX power (0dBm)
@@ -119,6 +119,7 @@ typedef struct {
     ng_netdev_event_cb_t event_cb;      /**< netdev event callback */
     kernel_pid_t mac_pid;               /**< the driver's thread's PID */
     kernel_pid_t tx_pid;                /**< the driver's TX thread's PID */
+    kernel_pid_t irq_pid;               /**< the driver's IRQ thread's PID */
 
     /* device specific fields */
     spi_t spi;                          /**< used SPI device */

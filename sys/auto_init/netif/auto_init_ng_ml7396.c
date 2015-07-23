@@ -64,7 +64,7 @@ void auto_init_ng_ml7396(void)
         else {
             ng_nomac_init(_nomac_stacks[i],
                     ML7396_MAC_STACKSIZE, ML7396_MAC_PRIO,
-                    "ml7396", (ng_netdev_t *)&ng_ml7396_devs[i]);
+                    "ng_ml7396_nomac", (ng_netdev_t *)&ng_ml7396_devs[i]);
         }
     }
 }

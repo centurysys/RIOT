@@ -26,6 +26,9 @@
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_registers.h"
 
+#define ENABLE_DEBUG (0)
+#include "debug.h"
+
 #define REG_WR 0x01
 #define REG_RD 0x00
 
@@ -41,6 +44,29 @@ static inline void _delay(int loops)
     for (i = 0; i < loops; i++) {
         __asm__ __volatile__ ("nop");
     }
+}
+
+static void _debug_dump_buffer(char *buf, size_t len)
+{
+#if ENABLE_DEBUG
+    int i;
+
+    for (i = 0; i < len; i++) {
+        if ((i % 16) == 0) {
+            printf("%04x:", i);
+        }
+
+        printf(" %02x", buf[i]);
+
+        if ((i % 16) == 15) {
+            puts("");
+        }
+    }
+
+    if ((i % 16) != 0) {
+        puts("");
+    }
+#endif
 }
 
 static void _ng_ml7396_spi_write(const ng_ml7396_t *dev, uint8_t addr, uint8_t val)
@@ -122,6 +148,9 @@ void ng_ml7396_reg_write(const ng_ml7396_t *dev, uint16_t reg, uint8_t value)
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
 
+    DEBUG("[W ]: bank: %d, addr: 0x%02x, value: 0x%02x\n",
+          (bank & 0x7f), addr >> 1, value);
+
     spi_acquire(dev->spi);
 
     _ng_ml7396_bank_sel(dev, bank);
@@ -137,6 +166,10 @@ void ng_ml7396_reg_writes(const ng_ml7396_t *dev, uint16_t reg,
 
     bank = REG2BANK(reg);
     addr = REG2ADDR(reg);
+
+    DEBUG("[Ws]: bank: %d, addr: 0x%02x, len: %d\n",
+          (bank & 0x7f), addr >> 1, len);
+    _debug_dump_buffer(value, len);
 
     spi_acquire(dev->spi);
 
@@ -160,6 +193,9 @@ uint8_t ng_ml7396_reg_read(const ng_ml7396_t *dev, uint16_t reg)
 
     spi_release(dev->spi);
 
+    DEBUG("[R ]: bank: %d, addr: 0x%02x -> value: 0x%02x\n",
+          (bank & 0x7f), addr >> 1, val);
+
     return val;
 }
 
@@ -175,6 +211,10 @@ void ng_ml7396_reg_reads(const ng_ml7396_t *dev, uint16_t reg,
 
     _ng_ml7396_bank_sel(dev, bank);
     _ng_ml7396_spi_reads(dev, addr, buf, len);
+
+    DEBUG("[Rs]: bank: %d, addr: 0x%02x, len: %d\n",
+          (bank & 0x7f), addr >> 1, len);
+    _debug_dump_buffer(buf, len);
 
     spi_release(dev->spi);
 }

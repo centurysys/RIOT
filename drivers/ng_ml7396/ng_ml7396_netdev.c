@@ -17,6 +17,8 @@
  * @}
  */
 
+#include <stdio.h>
+#include <unistd.h>
 
 #include "net/eui64.h"
 #include "net/ng_ieee802154.h"
@@ -31,6 +33,7 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
+extern void dump_buffer(char *buf, size_t len);
 
 /* TODO: generalize and move to ng_ieee802154 */
 /* TODO: include security header implications */
@@ -179,7 +182,7 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     }
 
     if ((int_pend[0] == 1) && (int_pend[1] == 1)) {
-        printf("%s: Pending page 0 and 1.\n", __FUNCTION__);
+        DEBUG("%s: Pending page 0 and 1.\n", __FUNCTION__);
         if ((last_page == -1) || (last_page == 1)) {
             page = 0;
         }
@@ -194,7 +197,7 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
         page = 1;
     }
     else {
-        printf("%s: page ???\n", __FUNCTION__);
+        DEBUG("%s: page ???\n", __FUNCTION__);
         return -1;
     }
 
@@ -274,6 +277,9 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     }
 
     /* copy payload */
+    printf("*** %s: payload data: %p, size: %d\n", __FUNCTION__,
+           payload->data, payload->size);
+    usleep(100 * 1000);
     ng_ml7396_rx_read(dev, payload->data, payload->size);
 
     /* read CRC */
@@ -283,17 +289,27 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     ng_ml7396_rx_read(dev, &(netif->lqi), 1);
 
     /* check CRC */
-    crc = crc_ccitt(0, payload->data, pkt_len);
+    crc = crc_ccitt(0, mhr, hdr_len);
+    crc = crc_ccitt(crc, payload->data, payload->size);
     crc_received = crc_buf[0] | crc_buf[1] << 8;
 
     if (crc == crc_received) {
         crc_ok = 1;
+
+        //dump_buffer(mhr, hdr_len);
+        //dump_buffer(payload->data, payload->size);
+        //dump_buffer(crc_buf, 2);
     }
     else {
         printf("! [%d] CRC(received) %02x%02x, calc: %04x, "
-               "status: 0x%08x, len: %d (0x%02x)\n",
+               "status: 0x%08x, hdr_len: %d, payload->size: %d\n",
                page, crc_buf[1], crc_buf[0], crc,
-               (unsigned int) status, pkt_len, pkt_len);
+               (unsigned int) status, hdr_len, payload->size);
+
+        dump_buffer(mhr, hdr_len);
+        dump_buffer(payload->data, payload->size);
+        dump_buffer(crc_buf, 2);
+
         crc_ok = 0;
     }
 
@@ -311,6 +327,7 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
         dev->event_cb(NETDEV_EVENT_RX_COMPLETE, payload);
     }
 
+    ng_ml7396_unlock(dev);
 ret:
     /* clear interrupts */
     _ng_ml7396_clear_rx_interrupts(dev, page, clear_fifo);
@@ -394,13 +411,15 @@ static int _get(ng_netdev_t *device, ng_netconf_opt_t opt,
                 return -EOVERFLOW;
             }
             *((uint64_t *) val) = ng_ml7396_get_addr_long(dev);
+            DEBUG("%s: NETCONF_OPT_ADDRESS_LONG -> %d\n",
+                  __FUNCTION__, sizeof(uint64_t));
             return sizeof(uint64_t);
 
         case NETCONF_OPT_ADDR_LEN:
             if (max_len < sizeof(uint16_t)) {
                 return -EOVERFLOW;
             }
-            *((uint16_t *) val) = 2;
+            *((uint16_t *) val) = 8;
             return sizeof(uint16_t);
 
         case NETCONF_OPT_SRC_LEN:
@@ -408,9 +427,11 @@ static int _get(ng_netdev_t *device, ng_netconf_opt_t opt,
                 return -EOVERFLOW;
             }
             if (dev->options & NG_ML7396_OPT_SRC_ADDR_LONG) {
+                DEBUG("%s: ADDR_LONG\n", __FUNCTION__);
                 *((uint16_t *) val) = 8;
             }
             else {
+                DEBUG("%s: !ADDR_LONG\n", __FUNCTION__);
                 *((uint16_t *) val) = 2;
             }
             return sizeof(uint16_t);
@@ -667,6 +688,8 @@ static int _set(ng_netdev_t *device, ng_netconf_opt_t opt,
 
 static int _add_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
 {
+    static int reset = 0;
+
     if (dev == NULL) {
         return -ENODEV;
     }
@@ -675,6 +698,14 @@ static int _add_event_cb(ng_netdev_t *dev, ng_netdev_event_cb_t cb)
     }
 
     dev->event_cb = cb;
+
+    if (reset == 0) {
+        reset = 1;
+
+        /* reset device to default values and put it into RX state */
+        ng_ml7396_reset(dev);
+    }
+
     return 0;
 }
 
