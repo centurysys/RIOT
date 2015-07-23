@@ -99,5 +99,8 @@ int uart0_readc(void)
 
 int uart0_putc(int c)
 {
-    return putchar(c);
+    putchar(c);
+    fflush(0);
+
+    return 1;
 }

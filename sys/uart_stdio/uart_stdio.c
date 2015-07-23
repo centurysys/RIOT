@@ -76,7 +76,7 @@ static int uart_stdio_tx_cb(void *arg)
 
     intstat = disableIRQ();
 
-    ret = ringbuffer_get_one(&tx_buf);
+    ret = ringbuffer_get_one(&_tx_buf);
     if (ret == -1) {
         restoreIRQ(intstat);
         return 0;
@@ -122,7 +122,7 @@ int uart_stdio_write(const char* buffer, int len)
 
     intstat = disableIRQ();
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < len; i++) {
         if (c[i] == '\n')
             ringbuffer_add_one(&_tx_buf, '\r');
         ringbuffer_add_one(&_tx_buf, c[i]);
