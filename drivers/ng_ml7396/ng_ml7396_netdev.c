@@ -28,6 +28,8 @@
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_registers.h"
 
+#include "ieee802154_frame.h"
+
 #include "crc.h"
 
 #define ENABLE_DEBUG (0)
@@ -321,6 +323,14 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
 
         goto ret;
     }
+
+    ieee802154_frame_t frame;
+
+    ieee802154_frame_read(mhr, &frame, hdr_len);
+
+    printf("------ IEEE802.15.4 frame ------\n");
+    printf("frame_type: %d\n", frame.fcf.frame_type);
+    printf("ack_req:    %d\n", frame.fcf.ack_req);
 
     /* finish up and send data to upper layers */
     if (dev->event_cb) {
