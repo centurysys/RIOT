@@ -56,7 +56,8 @@ void cpu_clock_scale(uint32_t source, uint32_t target, uint32_t *prescale);
 #define THREAD_EXTRA_STACKSIZE_PRINTF    (1024)
 
 #ifndef THREAD_STACKSIZE_DEFAULT
-#define THREAD_STACKSIZE_DEFAULT   (1024)
+//#define THREAD_STACKSIZE_DEFAULT   (1024)
+#define THREAD_STACKSIZE_DEFAULT   (2048)
 #endif
 
 #define THREAD_STACKSIZE_IDLE      (256)

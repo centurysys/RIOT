@@ -77,9 +77,6 @@ int gpio_init(gpio_t pin, gpio_dir_t dir, gpio_pp_t pullup)
     GPIO_TypeDef *port = _port(pin);
     int pin_num = _pin_num(pin);
 
-    printf("%s: port_num = %d, pin_num = %d\n", __FUNCTION__,
-           _port_num(pin), pin_num);
-
     /* enable clock */
     RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOAEN << _port_num(pin));
     /* configure pull register */
