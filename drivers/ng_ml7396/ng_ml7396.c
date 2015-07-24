@@ -518,8 +518,8 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
     size_t len, trim;
     int res;
 
-    printf("%s: pkt: %p, pkt->data: %p\n", __FUNCTION__, pkt, pkt->data);
-    usleep(100 * 1000);
+    //printf("%s: pkt: %p, pkt->data: %p\n", __FUNCTION__, pkt, pkt->data);
+    //usleep(100 * 1000);
 
     /* create 802.15.4 header */
     len = _make_data_frame_hdr(dev, mhr, (ng_netif_hdr_t *) pkt->data);
