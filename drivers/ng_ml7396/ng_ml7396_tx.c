@@ -22,9 +22,14 @@
 #include "net/ng_netapi.h"
 #include "net/ng_pktbuf.h"
 
+#include "net/ng_ieee802154.h"
+#include "net/ng_netbase.h"
+
 #include "ng_ml7396_registers.h"
 #include "ng_ml7396_internal.h"
 #include "ng_ml7396_netdev.h"
+
+#include "ieee802154_frame.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -107,6 +112,19 @@ static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
     msg_reply(msg, msg);
 }
 
+static void _ng_ml7396_sendack(ng_ml7396_t *dev, msg_t *msg)
+{
+    ng_pktsnip_t *pkt;
+    ieee802154_frame_t *frame;
+
+    pkt = (ng_pktsnip_t *) msg->content.ptr;
+    frame = (ieee802154_frame_t *) pkt->data;
+
+    ng_ml7396_send_ack(dev, frame);
+
+    ng_pktbuf_release(pkt);
+}
+
 static void *_ng_ml7396_tx_thread(void *args)
 {
     ng_ml7396_t *dev = (ng_ml7396_t *) args;
@@ -119,6 +137,10 @@ static void *_ng_ml7396_tx_thread(void *args)
             case NG_NETAPI_MSG_TYPE_SND:
                 printf("%s: NG_NETAPI_MSG_TYPE_SND received.\n", __FUNCTION__);
                 _ng_ml7396_send(dev, &msg);
+                break;
+
+            case NG_ML7396_MSG_TYPE_SNDACK:
+                _ng_ml7396_sendack(dev, &msg);
                 break;
 
             default:

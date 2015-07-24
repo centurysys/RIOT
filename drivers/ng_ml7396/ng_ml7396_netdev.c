@@ -37,6 +37,33 @@
 
 extern void dump_buffer(char *buf, size_t len);
 
+static size_t _make_ack_frame_hdr(ng_ml7396_t *dev, uint8_t *buf,
+                                  uint64_t dst_addr, uint8_t seq_nr)
+{
+    int pos = 0;
+
+    /* we are building a data frame here */
+    buf[0] = NG_IEEE802154_FCF_TYPE_ACK;
+    buf[1] = NG_IEEE802154_FCF_VERS_V1;
+
+    /* fill in destination PAN ID */
+    pos = 3;
+    buf[pos++] = (uint8_t)((dev->pan) & 0xff);
+    buf[pos++] = (uint8_t)((dev->pan) >> 8);
+
+    buf[1] |= NG_IEEE802154_FCF_DST_ADDR_LONG;
+    uint8_t *_dst_addr = (uint8_t *) &dst_addr;
+
+    for (int i = 7;  i >= 0; i--) {
+        buf[pos++] = _dst_addr[i];
+    }
+
+    /* set sequence number */
+    buf[2] = seq_nr;
+    /* return actual header length */
+    return pos;
+}
+
 /* TODO: generalize and move to ng_ieee802154 */
 /* TODO: include security header implications */
 static size_t _get_frame_hdr_len(uint8_t *mhr)
@@ -140,6 +167,65 @@ static ng_pktsnip_t *_make_netif_hdr(uint8_t *mhr)
     return snip;
 }
 
+static void _ng_ml7396_ack_received(ng_netdev_t *netdev, ieee802154_frame_t *frame)
+{
+    ng_ml7396_t *dev = (ng_ml7396_t *) netdev;
+    uint64_t addr;
+    msg_t msg;
+
+    if (frame->fcf.dest_addr_m != IEEE_802154_LONG_ADDR_M)
+        return;
+
+    addr = ng_ml7396_get_addr_long(dev);
+
+    if (memcmp(&addr, frame->dest_addr, sizeof(uint64_t)) == 0) {
+        msg.type = MSG_ACK_RECEIVED;
+        msg.content.value = frame->seq_nr;
+        msg_send(&msg, dev->tx_pid);
+
+        printf("%s: ACK received.\n", __FUNCTION__);
+    }
+
+    return;
+}
+
+static void _ng_ml7396_send_ack(ng_netdev_t *netdev, ieee802154_frame_t *frame)
+{
+    ng_ml7396_t *dev = (ng_ml7396_t *) netdev;
+    msg_t msg;
+    ng_pktsnip_t *pkt;
+    uint16_t panid;
+    uint64_t addr;
+
+    if (frame->fcf.ack_req == 0) {
+        return;
+    }
+
+    panid = ng_ml7396_get_pan(dev);
+    addr = ng_ml7396_get_addr_long(dev);
+
+    if ((panid == frame->dest_pan_id) &&
+        (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
+        memcmp(frame->dest_addr, &addr, 8) == 0) {
+
+        pkt = ng_pktbuf_add(NULL, NULL, sizeof(ieee802154_frame_t),
+                            NG_NETTYPE_NETIF);
+        if (!pkt) {
+            return;
+        }
+
+        memcpy(pkt->data, frame, sizeof(ieee802154_frame_t));
+
+        msg.type = NG_ML7396_MSG_TYPE_SNDACK;
+        msg.content.ptr = pkt;
+        msg_send(&msg, dev->tx_pid);
+
+        printf("** SEND_ACK\n");
+    }
+
+    return;
+}
+
 static int _send(ng_netdev_t *netdev, ng_pktsnip_t *pkt)
 {
     ng_ml7396_t *dev = (ng_ml7396_t *) netdev;
@@ -164,6 +250,7 @@ static int _send(ng_netdev_t *netdev, ng_pktsnip_t *pkt)
 
 static int _receive_data(ng_ml7396_t *dev, uint32_t status)
 {
+    ieee802154_frame_t frame;
     uint8_t mhr[NG_IEEE802154_MAX_HDR_LEN], crc_buf[2];
     size_t pkt_len, hdr_len;
     ng_pktsnip_t *hdr, *payload = NULL;
@@ -324,20 +411,25 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
         goto ret;
     }
 
-    ieee802154_frame_t frame;
-
     ieee802154_frame_read(mhr, &frame, hdr_len);
 
     printf("------ IEEE802.15.4 frame ------\n");
     printf("frame_type: %d\n", frame.fcf.frame_type);
     printf("ack_req:    %d\n", frame.fcf.ack_req);
 
-    /* finish up and send data to upper layers */
-    if (dev->event_cb) {
-        dev->event_cb(NETDEV_EVENT_RX_COMPLETE, payload);
+    if (frame.fcf.frame_type == IEEE_802154_ACK_FRAME) {
+        _ng_ml7396_ack_received(dev, &frame);
+    } else {
+        _ng_ml7396_send_ack(dev, &frame);
+
+        /* finish up and send data to upper layers */
+        if (dev->event_cb) {
+            dev->event_cb(NETDEV_EVENT_RX_COMPLETE, payload);
+        }
     }
 
     ng_ml7396_unlock(dev);
+
 ret:
     /* clear interrupts */
     _ng_ml7396_clear_rx_interrupts(dev, page, clear_fifo);

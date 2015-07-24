@@ -29,6 +29,8 @@ typedef enum {
 } ml7396_msg_t;
 
 
+#define NG_ML7396_MSG_TYPE_SNDACK (0x9901)
+
 /* Lock/Unlock ML7396 */
 void ng_ml7396_lock(ng_ml7396_t *dev);
 void ng_ml7396_unlock(ng_ml7396_t *dev);

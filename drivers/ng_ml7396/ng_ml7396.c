@@ -298,6 +298,41 @@ static void _ng_ml7396_backoff(ng_ml7396_t *dev)
     }
 }
 
+static size_t _make_enhanced_ack_frame(ng_ml7396_t *dev, uint8_t *buf,
+                                       ieee802154_frame_t *frame)
+{
+    int len;
+    ieee802154_frame_t frame_tx;
+
+    frame_tx.seq_nr = frame->seq_nr;
+    frame_tx.src_pan_id = frame->dest_pan_id;
+
+    if (frame->fcf.panid_comp == 1) {
+        frame_tx.dest_pan_id = frame->dest_pan_id;
+    }
+    else {
+        frame_tx.dest_pan_id = frame->src_pan_id;
+    }
+
+    memcpy(frame_tx.dest_addr, frame->src_addr, 8);
+
+    if (frame->src_pan_id == frame->dest_pan_id) {
+        frame_tx.fcf.panid_comp = 1;
+    }
+    else {
+        frame_tx.fcf.panid_comp = 0;
+    }
+
+    frame_tx.fcf.frame_type = IEEE_802154_ACK_FRAME;
+    frame_tx.fcf.frame_ver = frame->fcf.frame_ver;
+    frame_tx.fcf.src_addr_m = 0;
+    frame_tx.fcf.dest_addr_m = IEEE_802154_LONG_ADDR_M;
+
+    len = ieee802154_frame_init(&frame_tx, buf);
+
+    return len;
+}
+
 static size_t _make_data_frame_hdr(ng_ml7396_t *dev, uint8_t *buf,
                                    ng_netif_hdr_t *hdr)
 {
@@ -508,6 +543,62 @@ size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len)
     msg_send_receive(&msg, &reply, dev->tx_pid);
 
     return (int) msg.content.value;
+}
+
+size_t ng_ml7396_send_ack(ng_ml7396_t *dev, ieee802154_frame_t *frame)
+{
+    ng_pktsnip_t *pkt;
+    uint8_t mhr[NG_IEEE802154_MAX_HDR_LEN];
+    uint16_t crc;
+    size_t len, trim;
+    int res;
+
+    /* create IEEE802.15.4 Enhanced ACK frame */
+    len = _make_enhanced_ack_frame(dev, mhr, frame);
+
+    if (len == 0) {
+        DEBUG("[ng_ml7396] error: unable to create 802.15.4 ACK frame\n");
+        len = -ENOMSG;
+        goto ret;
+    }
+
+    crc = crc_ccitt(0, mhr, len);
+
+    /* --- begin ML7396 critical section --- */
+    ng_ml7396_lock(dev);
+
+    res = ng_ml7396_tx_prepare(dev);
+
+    if (res == 0) {
+        uint8_t phy_hdr[2];
+
+        phy_hdr[0] = 0x10;
+        phy_hdr[1] = len + 2;
+
+        /* load PHY header to FIFO */
+        ng_ml7396_tx_load(dev, phy_hdr, 2);
+
+        /* load ACK frame */
+        ng_ml7396_tx_load(dev, mhr, len);
+
+        /* load CRC */
+        ng_ml7396_tx_load(dev, (uint8_t *) &crc, sizeof(crc));
+
+        res = ng_ml7396_tx_exec(dev);
+        printf("%s: tx_exec -> %d\n", __FUNCTION__, res);
+    }
+
+    if (res != 0) {
+        len = -ETIMEDOUT;
+    }
+
+    /* --- end ML7396 critical section --- */
+    ng_ml7396_unlock(dev);
+
+    ng_ml7396_switch_to_rx(dev);
+
+ret:
+    return len;
 }
 
 size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)

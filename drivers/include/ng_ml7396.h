@@ -31,6 +31,7 @@
 #include "periph/gpio.h"
 #include "net/ng_netdev.h"
 #include "ng_ml7396.h"
+#include "ieee802154_frame.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -323,6 +324,8 @@ void ng_ml7396_set_state(ng_ml7396_t *dev, uint8_t state);
 size_t ng_ml7396_send(ng_ml7396_t *dev, uint8_t *data, size_t len);
 
 size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt);
+
+size_t ng_ml7396_send_ack(ng_ml7396_t *dev, ieee802154_frame_t *frame);
 
 /**
  * @brief   Prepare for sending of data
