@@ -43,31 +43,41 @@ static char _ml7396_tx_stack[NG_ML7396_TX_STACKSIZE];
 
 static int _ng_ml7396_wait_ack(ng_ml7396_t *dev, uint8_t seq_nr_expected)
 {
-    timex_t timeout;
+    timex_t timeout, t_start, t_end;
     int res;
     msg_t msg;
 
     timeout.seconds = 0;
     timeout.microseconds = 100 * 1000;
 
-    res = vtimer_msg_receive_timeout(&msg, timeout);
+    while (1) {
+        vtimer_now(&t_start);
+        res = vtimer_msg_receive_timeout(&msg, timeout);
+        vtimer_now(&t_end);
 
-    if (res == 1) {
-        uint8_t seq_nr = (uint8_t) (msg.content.value & 0xff);
+        printf("start: %u.%06u, end: %u.%06u\n",
+               t_start.seconds, t_start.microseconds,
+               t_end.seconds, t_end.microseconds);
 
-        if (msg.type == MSG_ACK_RECEIVED) {
-            if (seq_nr == seq_nr_expected) {
-                return 0;
-            }
-            else {
-                printf("%s: seq_nr mismatch, (send: 0x%02x, recv: 0x%02x)\n",
-                       __FUNCTION__, seq_nr_expected, seq_nr);
+        if (res == 1) {
+            uint8_t seq_nr = (uint8_t) (msg.content.value & 0xff);
+
+            if (msg.type == MSG_ACK_RECEIVED) {
+                if (seq_nr == seq_nr_expected) {
+                    printf("*** %s: ACK OK\n", __FUNCTION__);
+                    return 0;
+                }
+                else {
+                    printf("%s: seq_nr mismatch, (send: 0x%02x, recv: 0x%02x)\n",
+                           __FUNCTION__, seq_nr_expected, seq_nr);
+                }
             }
         }
-    }
-    else {
-        puts("ACK timeouted.");
-        /* ACK timeouted. */
+        else {
+            puts("ACK timeouted.");
+            /* ACK timeouted. */
+            break;
+        }
     }
 
     return -1;
@@ -78,28 +88,47 @@ extern void ps(void);
 static void _ng_ml7396_send(ng_ml7396_t *dev, msg_t *msg)
 {
     ng_pktsnip_t *pkt;
+    ng_netif_hdr_t *hdr;
     size_t sent;
-    int i, retry;
+    int i, retry, req_ack;
+    u8 seq_nr;
 
     sent = -ETIMEDOUT;
 
     pkt = (ng_pktsnip_t *) msg->content.ptr;
-    retry = dev->max_retries;
+    hdr = (ng_netif_hdr_t *) pkt->data;
+
+    if (!(hdr->flags & NG_NETIF_HDR_FLAGS_BROADCAST) &&
+        !(hdr->flags & NG_NETIF_HDR_FLAGS_MULTICAST)) {
+        req_ack = 1;
+        retry = dev->max_retries;
+    }
+    else {
+        req_ack = 0;
+        retry = 1;
+    }
 
     for (i = 0; i < retry; i++) {
+        seq_nr = dev->seq_nr;
+
         puts("1");
         sent = ng_ml7396_send_pkt(dev, pkt);
         puts("2");
 
         if (sent > 0) {
-            puts("3");
-            if (_ng_ml7396_wait_ack(dev, dev->seq_nr) == 0) {
-                puts("4");
-                break;
+            if (req_ack == 1) {
+                puts("3");
+                if (_ng_ml7396_wait_ack(dev, seq_nr) == 0) {
+                    puts("4");
+                    break;
+                }
+                else {
+                    puts("5");
+                    sent = -ETIMEDOUT;
+                }
             }
             else {
-                puts("5");
-                sent = -ETIMEDOUT;
+                puts("11");
             }
         }
     }
