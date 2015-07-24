@@ -8,5 +8,21 @@ endif
 ifneq (,$(filter ng_netif,$(USEMODULE)))
   USEMODULE += ng_ml7396
   USEMODULE += ng_nomac
+  USEMODULE += ng_sixlowpan
+  USEMODULE += ng_sixlowpan_iphc
+  USEMODULE += ng_sixlowpan_frag
+  USEMODULE += ng_sixlowpan_netif
+  USEMODULE += ng_sixlowpan_ctx
+  USEMODULE += ng_ipv6
+  USEMODULE += ng_ipv6_addr
+  USEMODULE += ng_ipv6_ext
+  USEMODULE += ng_ipv6_hdr
+  USEMODULE += ng_ipv6_netif
+  USEMODULE += ng_ipv6_nc
+  USEMODULE += ng_udp
+  USEMODULE += ng_pktdump
   USEMODULE += auto_init_ng_netif
+  USEMODULE += ng_ndp
+  USEMODULE += ng_icmpv6
+  USEMODULE += ng_icmpv6_echo
 endif
