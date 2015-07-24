@@ -407,6 +407,9 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
 
     if (frame.fcf.frame_type == IEEE_802154_ACK_FRAME) {
         ng_ml7396_unlock(dev);
+
+        /* release packet */
+        ng_pktbuf_release(payload);
         _ng_ml7396_ack_received(dev, &frame);
     } else {
         _ng_ml7396_send_ack(dev, &frame);
