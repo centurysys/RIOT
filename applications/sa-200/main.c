@@ -18,6 +18,10 @@
 #include "shell_commands.h"
 #include "board_uart0.h"
 
+#define ENABLE_DEBUG (1)
+#include "debug.h"
+
+
 static int shell_readc(void)
 {
     char c = 0;
@@ -32,6 +36,37 @@ static int shell_putchar(int c)
 
     return 1;
 }
+
+#if ENABLE_DEBUG
+extern void ng_ml7396_regdump(int bank);
+
+static int cmd_ng_ml7396_regdump(int argc, char **argv)
+{
+    int bank = 0;
+
+    if (argc >= 2) {
+        bank = atoi(argv[1]);
+
+        if (bank < 0 || bank > 2)
+            bank = 0;
+    }
+
+    ng_ml7396_regdump(bank);
+
+    return 0;
+}
+#else
+static int cmd_ng_ml7396_regdump(int argc, char **argv)
+{
+    puts("DEBUG disabled.");
+    return 0;
+}
+#endif
+
+static shell_command_t commands[] = {
+    { "regdump", "ML7396B dump registers", cmd_ng_ml7396_regdump },
+    { NULL, NULL, NULL }
+};
 
 int main(void)
 {
