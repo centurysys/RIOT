@@ -552,6 +552,9 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
 
     _ng_ml7396_backoff(dev);
 
+    /* --- begin ML7396 critical section --- */
+    ng_ml7396_lock(dev);
+
     res = ng_ml7396_tx_prepare(dev);
 
     if (res == 0) {
@@ -585,6 +588,9 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
     if (res != 0) {
         len = -ETIMEDOUT;
     }
+
+    /* --- end ML7396 critical section --- */
+    ng_ml7396_unlock(dev);
 
     ng_ml7396_switch_to_rx(dev);
 
@@ -622,12 +628,16 @@ int ng_ml7396_tx_prepare(ng_ml7396_t *dev)
         }
 
         if (yield == 1) {
+            ng_ml7396_unlock(dev);
+
             /* re-enable interrupt */
             ng_ml7396_set_interrupt_mask(dev, ML7396_INT_ALL);
             ng_ml7396_set_interrupt_enable(dev, enable);
 
             usleep(50 * 1000);
             thread_yield();
+
+            ng_ml7396_lock(dev);
         }
         else {
             break;
