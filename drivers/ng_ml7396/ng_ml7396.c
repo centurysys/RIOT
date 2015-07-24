@@ -633,10 +633,10 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
     /* generate CRC */
     snip_tmp = snip;
     crc = crc_ccitt(0, mhr, len);
-    dump_buffer(mhr, len);
+    //dump_buffer(mhr, len);
 
     while (snip_tmp) {
-        dump_buffer(snip_tmp->data, snip_tmp->size);
+        //dump_buffer(snip_tmp->data, snip_tmp->size);
         crc = crc_ccitt(crc, snip_tmp->data, snip_tmp->size);
         snip_tmp = snip_tmp->next;
     }
@@ -673,7 +673,7 @@ size_t ng_ml7396_send_pkt(ng_ml7396_t *dev, ng_pktsnip_t *pkt)
         ng_ml7396_tx_load(dev, (uint8_t *) &crc, sizeof(crc));
 
         res = ng_ml7396_tx_exec(dev);
-        printf("%s: tx_exec -> %d\n", __FUNCTION__, res);
+        //printf("%s: tx_exec -> %d\n", __FUNCTION__, res);
     }
 
     if (res != 0) {
@@ -746,8 +746,8 @@ int ng_ml7396_tx_prepare(ng_ml7396_t *dev)
 
 size_t ng_ml7396_tx_load(ng_ml7396_t *dev, uint8_t *data, size_t len)
 {
-    printf("%s: len: %d\n", __FUNCTION__, len);
-    dump_buffer(data, len);
+    //printf("%s: len: %d\n", __FUNCTION__, len);
+    //dump_buffer(data, len);
 
     ng_ml7396_fifo_writes(dev, data, len);
 

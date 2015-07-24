@@ -368,7 +368,6 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     /* copy payload */
     printf("*** %s: payload data: %p, size: %d\n", __FUNCTION__,
            payload->data, payload->size);
-    usleep(100 * 1000);
     ng_ml7396_rx_read(dev, payload->data, payload->size);
 
     /* read CRC */
