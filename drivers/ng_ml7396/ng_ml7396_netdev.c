@@ -208,18 +208,7 @@ static void _ng_ml7396_send_ack(ng_netdev_t *netdev, ieee802154_frame_t *frame)
         (frame->fcf.dest_addr_m == IEEE_802154_LONG_ADDR_M) &&
         memcmp(frame->dest_addr, &addr, 8) == 0) {
 
-        pkt = ng_pktbuf_add(NULL, NULL, sizeof(ieee802154_frame_t),
-                            NG_NETTYPE_NETIF);
-        if (!pkt) {
-            return;
-        }
-
-        memcpy(pkt->data, frame, sizeof(ieee802154_frame_t));
-
-        msg.type = NG_ML7396_MSG_TYPE_SNDACK;
-        msg.content.ptr = pkt;
-        msg_send(&msg, dev->tx_pid);
-
+        ng_ml7396_send_ack(dev, frame);
         printf("** SEND_ACK\n");
     }
 
@@ -417,17 +406,18 @@ static int _receive_data(ng_ml7396_t *dev, uint32_t status)
     printf("ack_req:    %d\n", frame.fcf.ack_req);
 
     if (frame.fcf.frame_type == IEEE_802154_ACK_FRAME) {
+        ng_ml7396_unlock(dev);
         _ng_ml7396_ack_received(dev, &frame);
     } else {
         _ng_ml7396_send_ack(dev, &frame);
+
+        ng_ml7396_unlock(dev);
 
         /* finish up and send data to upper layers */
         if (dev->event_cb) {
             dev->event_cb(NETDEV_EVENT_RX_COMPLETE, payload);
         }
     }
-
-    ng_ml7396_unlock(dev);
 
 ret:
     /* clear interrupts */

@@ -564,10 +564,7 @@ size_t ng_ml7396_send_ack(ng_ml7396_t *dev, ieee802154_frame_t *frame)
 
     crc = crc_ccitt(0, mhr, len);
 
-    /* --- begin ML7396 critical section --- */
-    ng_ml7396_lock(dev);
-
-    res = ng_ml7396_tx_prepare(dev);
+    res = ng_ml7396_tx_exec(dev);
 
     if (res == 0) {
         uint8_t phy_hdr[2];
@@ -591,9 +588,6 @@ size_t ng_ml7396_send_ack(ng_ml7396_t *dev, ieee802154_frame_t *frame)
     if (res != 0) {
         len = -ETIMEDOUT;
     }
-
-    /* --- end ML7396 critical section --- */
-    ng_ml7396_unlock(dev);
 
     ng_ml7396_switch_to_rx(dev);
 
