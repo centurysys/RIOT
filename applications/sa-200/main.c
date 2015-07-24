@@ -9,6 +9,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "thread.h"
@@ -39,7 +40,8 @@ int main(void)
 
     puts("-- SA-200 console --");
 
-    shell_init(&shell, NULL, UART0_BUFSIZE, shell_readc, shell_putchar);
+    //shell_init(&shell, commands, UART0_BUFSIZE, shell_readc, shell_putchar);
+    shell_init(&shell, commands, UART0_BUFSIZE, uart0_readc, uart0_putc);
 
     shell_run(&shell);
     return 0;
